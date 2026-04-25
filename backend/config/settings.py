@@ -14,6 +14,8 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -21,6 +23,7 @@ try:
     from dotenv import load_dotenv
 
     load_dotenv(BASE_DIR / ".env")
+    load_dotenv(BASE_DIR / ".env.local", override=True)
 except ImportError:
     pass
 
@@ -33,13 +36,22 @@ SECRET_KEY = os.environ.get(
     "django-insecure-dev-only-change-in-production",
 )
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+# Vercel runtime sets VERCEL=1; local dev should stay DEBUG=True by default
+_is_vercel = bool(os.environ.get("VERCEL", "").strip())
+if _is_vercel:
+    DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
+else:
+    DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
 _allowed = os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip()
 if _allowed:
     ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+# Vercel preview + production: *.vercel.app (Django: leading dot = subdomains of this host)
+if _is_vercel and ".vercel.app" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(".vercel.app")
 
 
 # Application definition
@@ -93,11 +105,16 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+# DATABASE_URL (örn. Vercel Postgres, Neon) varsa PostgreSQL; yoksa yerel SQLite
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    "default": dj_database_url.config(
+        default={
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": str(BASE_DIR / "db.sqlite3"),
+        },
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 
@@ -135,7 +152,30 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
+# Vercel build: collectstatic için gerekli (Vercel CDN)
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Vercel / ters vekil: HTTPS ve doğru host
+if _is_vercel:
+    USE_X_FORWARDED_HOST = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+_csrf_extra = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
+CSRF_TRUSTED_ORIGINS = [u.strip() for u in _csrf_extra.split(",") if u.strip()]
+if _is_vercel:
+    _vurl = os.environ.get("VERCEL_URL", "").strip()
+    if _vurl:
+        if not _vurl.lower().startswith("http"):
+            _vurl = f"https://{_vurl.rstrip('/')}"
+        if _vurl not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(_vurl)
+
+if _is_vercel and not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    if os.environ.get("DJANGO_FORCE_SSL", "1") == "1":
+        SECURE_SSL_REDIRECT = True
 
 # --- CORS ---
 # Paketlenmiş Electron (başka PC) genelde Origin null/file → LAN testi için .env: DJANGO_CORS_ALLOW_ALL=1

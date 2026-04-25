@@ -68,6 +68,20 @@ Token yenileme: `POST /api/auth/refresh/` body: `{ "refresh": "<refresh_token>" 
 
 Ayrıntı: `../admin/README.md`.
 
+## Vercel’e deploy
+
+1. [Vercel](https://vercel.com)’de yeni proje: bu Git repo’yu bağla. **Root Directory** `backend` olmalı (kök sadece `backend/` altında `manage.py` varsa).
+2. Proje depolama: [Vercel Storage Postgres](https://vercel.com/docs/storage) veya Neon/Supabase vb. bir **PostgreSQL** bağla; Vercel otomatik `DATABASE_URL` (veya sen aynı isimle) env verir. Sunucusuz ortamda **kalıcı SQLite yok.**
+3. Vercel **Environment variables** (Production / Preview ayrı ayrı isteğe göre):
+   - `DJANGO_SECRET_KEY` — üretim için güçlü, gizli anahtar (zorunlu)
+   - `DATABASE_URL` — Postgres (veritabanı sağlayıcın adım adım eklemişse doldurulur)
+   - İsteğe: `DJANGO_CORS_EXTRA_ORIGINS` — web arayüzü URL’leri, virgülle (ör. `https://uydomain.com,https://www...`)
+   - İsteğe: `DJANGO_DEBUG=1` — sadece hata ararken; normalde açık bırakma
+4. **İlk ve şema değişikliklerinde:** lokalde `npx vercel@latest link` (veya Vercel CLI) ile projeyi bağla, ardından `npx vercel@latest env pull` ile `.env.local` al; `cd backend` → `python manage.py migrate`. Gerekirse `createsuperuser` / `seed_demo_hotel`.
+5. Otomatik: Vercel Django için `collectstatic` çalıştırır; `STATIC_ROOT` `settings` içinde tanımlı.
+
+Detay: [Vercel Django](https://vercel.com/docs/frameworks/full-stack/django).
+
 ### Admin + backend aynı PC, desktop başka PC
 
 - **Desktop `api-config.json`:** Sadece **Django adresi** → `http://<API_PC_IP>:8000` (admin URL’si burada **yok**).
