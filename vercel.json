@@ -1,4 +1,7 @@
 {
   "framework": "django",
-  "installCommand": "pip install -r backend/requirements.txt"
+  "installCommand": "pip install -r backend/requirements.txt",
+  "env": {
+    "PYTHONPATH": "backend"
+  }
 }
