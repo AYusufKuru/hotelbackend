@@ -1,0 +1,4 @@
+{
+  "framework": "django",
+  "installCommand": "pip install -r requirements.txt"
+}
