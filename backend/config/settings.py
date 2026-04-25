@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -117,7 +118,29 @@ def _database_url_from_env() -> str:
     return ""
 
 
+def _normalize_postgres_dsn(dsn: str) -> str:
+    """
+    Neon vb. sorgu parametrelerinden channel_binding, bazı psycopg2/libpq
+    sürümlerinde hata/uyumsuzluk verir; gerekirse sadece sslmode kalsın.
+    """
+    dsn = dsn.strip()
+    if dsn.startswith("postgres://"):
+        dsn = "postgresql://" + dsn[len("postgres://") :]
+    p = urlsplit(dsn)
+    if not p.query or "channel_binding" not in p.query.lower():
+        return dsn
+    pairs = [
+        (k, v)
+        for k, v in parse_qsl(p.query, keep_blank_values=True)
+        if k.lower() != "channel_binding"
+    ]
+    new_q = urlencode(pairs)
+    return urlunsplit((p.scheme, p.netloc, p.path, new_q, p.fragment))
+
+
 _dsn = _database_url_from_env()
+if _dsn:
+    _dsn = _normalize_postgres_dsn(_dsn)
 if not _dsn or _dsn in ("null", "undefined", "None"):
     _local_sqlite = str(BASE_DIR / "db.sqlite3")
     if _is_vercel:
@@ -141,14 +164,18 @@ else:
     import dj_database_url
 
     try:
-        DATABASES = {
-            "default": dj_database_url.parse(
-                _dsn,
-                conn_max_age=600,
-                conn_health_checks=True,
-            )
-        }
-    except (ValueError, TypeError) as e:
+        _parsed = dj_database_url.parse(
+            _dsn,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+        # Parse sonrası da libpq'ye giden sözlükten çıkar
+        if isinstance(_parsed, dict) and "OPTIONS" in _parsed and isinstance(
+            _parsed.get("OPTIONS"), dict
+        ):
+            _parsed["OPTIONS"].pop("channel_binding", None)
+        DATABASES = {"default": _parsed}
+    except Exception as e:
         # DSN hatalıysa uygulama açılmasın diye açık hata; yedek: /tmp sqlite
         if _is_vercel:
             _vercel_tmp = (os.environ.get("VERCEL_SQLITE_PATH", "/tmp") or "/tmp").rstrip(
