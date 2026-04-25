@@ -1,0 +1,114 @@
+================================================================================
+HotelCRM Backend — API Referansi
+================================================================================
+Base URL (gelistirme): http://127.0.0.1:8000
+
+KIMLIK DOGRULAMA
+--------------------------------------------------------------------------------
+Tum /api/* CRUD uclari (asagidaki tablo kaynaklari) JWT gerektirir:
+  Authorization: Bearer <access_token>
+
+Herkese acik:
+  POST /api/auth/login/     Girdi: {"username","password"}
+                            Cikti: access, refresh, user { id, username, email }
+
+  POST /api/auth/refresh/   Girdi: {"refresh"}
+                            Cikti: access (ve ayarlara gore refresh)
+
+Login endpoint'i degismedi: desktop /api/auth/login/ ile uyumludur (prefix: api/ + auth/ + login/).
+
+VERI MODELI
+--------------------------------------------------------------------------------
+Iliskisel sema: backend/docs/hotelcrm.dbml (dbdiagram.io ile acilabilir).
+Django modelleri hotelcrm uygulamasinda; tablo adlari hotelcrm_* prefix ile.
+
+OZEL NOTLAR
+--------------------------------------------------------------------------------
+- invoices (DBML) -> Django modeli: OperationalInvoice
+  API yolu: /api/operationalinvoice/
+  (Stok envanterindeki inventory ile kod karismasin diye.)
+
+- Django User (django.contrib.auth) kullanilir; DBML'deki ayri "users" tablosu yok.
+  Rol/izin: Role, Permission, UserRole, RolePermission
+
+REST KAYNAKLARI (ModelViewSet)
+--------------------------------------------------------------------------------
+Her kaynak icin standart DRF:
+  GET    /api/<kaynak>/           Liste
+  POST   /api/<kaynak>/           Olustur
+  GET    /api/<kaynak>/{uuid}/    Detay (PK cogu UUID; BigAutoField: integrationeventlog)
+  PUT    /api/<kaynak>/{uuid}/    Tam guncelleme
+  PATCH  /api/<kaynak>/{uuid}/    Kismi guncelleme
+  DELETE /api/<kaynak>/{uuid}/    Sil
+
+<kaynak> degerleri (model_meta.model_name, tire yok):
+
+  role
+  permission
+  userrole
+  rolepermission
+  auditlog
+  hotel
+  roomtype
+  channel
+  room
+  guest
+  reservation
+  folio
+  folioline
+  cashtransaction
+  payment
+  department
+  staffmember
+  operationaltask
+  notification
+  menucategory
+  menuitem
+  restaurantorder
+  restaurantorderline
+  spaservice
+  spaappointment
+  minibarproduct
+  minibarcharge
+  minibarchargeline
+  laundrypricelistitem
+  laundryorder
+  laundryorderline
+  inventoryitem
+  kbsguestsubmission
+  groupbooking
+  banquetevent
+  lostfounditem
+  travelagency
+  agencycontractrate
+  agencypromotion
+  glaccount
+  journalentry
+  operationalinvoice
+  commercialcontract
+  saleslead
+  marketingcampaign
+  touroffer
+  guesttransfer
+  recipe
+  foodwastelog
+  departmentbudget
+  entertainmentactivity
+  entertainmentshow
+  kvkkconsent
+  crssynclog
+  integrationconnection
+  integrationeventlog  (pk: tam sayi)
+  purchaseorder
+  guestfeedbackentry
+  channelmanagersettings
+
+Ornek tam URL: http://127.0.0.1:8000/api/hotel/
+
+JSON format: ?format=json (DRF varsayilan)
+
+YONETIM PANELI
+--------------------------------------------------------------------------------
+  /admin/  — Tum hotelcrm modelleri kayitli; superuser gerekir.
+
+================================================================================

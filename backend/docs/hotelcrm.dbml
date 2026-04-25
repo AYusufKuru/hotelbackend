@@ -1,0 +1,1032 @@
+// =============================================================================
+// HotelCRM — dbdiagram.io DBML şablonu
+// =============================================================================
+//
+// NASIL OKUMALISIN?
+// 1) Önce "hotels" — neredeyse tüm iş tabloları buraya bağlı (çoklu tesis).
+// 2) Çekirdek akış: guests → reservations → folios → folio_lines; ödemeler cash_transactions / payments.
+// 3) Odalar: room_types → rooms; rezervasyon hem room_id hem room_type_id tutar (atanmış oda + satılan tip).
+// 4) Modül tabloları (restoran, SPA, vb.) çoğunlukla hotel_id + room_id ve/veya reservation_id ile bağlanır.
+// 5) Enum’lar: UI’daki Türkçe durumlar (dolu/boş vb.) veritabanında İngilizce sabitlere çevrildi; rapor ve kod tek dilde olur.
+//
+// Django JWT: users tablosu gerçekte django.contrib.auth.User ile birleştirilir; burada sade iskelet var.
+// =============================================================================
+
+Project hotelcrm {
+  database_type: 'PostgreSQL'
+  Note: '''
+    OKUMA REHBERI (kisaca)
+
+    MERKEZ: hotels — Her otel veya tesis kaydi hotel_id ile ayrilir. Login branch kodu hotels.code ile
+    eslestirilebilir; CRS zincirinde birden fazla satir olur.
+
+    Cekirdek MUSTERI AKISI:
+    guests (kisi karti) <- reservations.guest_id (walk-in icin nullable, isim primary_guest_name)
+    reservations -> rooms / room_types / channels
+    Her konaklamanin tek folio hesabi: folios.reservation_id bire bir; folio_lines faturalandirilan satirlar.
+
+    ODEME: Tahsilat payments veya cash_transactions; folio satiri eklenince rezervasyon tutarlari guncellenir.
+
+    DIGER MODULLER: Restoran SPA Minibar vb. room_id ve reservation_id ile ana akisa baglanir.
+    Grup ve ziyafet ayri tablolar; ileride reservation ile formal baglanti eklenebilir.
+
+    MUHASEBE: journal_entries simdilik basit yevmiye; tam cift taraf icin journal_lines gerekir.
+
+    SOZLESME: commercial_contracts genel hukuki; travel_agencies B2B tarife odakli (farkli moduller).
+  '''
+}
+
+// -----------------------------------------------------------------------------
+// KIMLIK & YETKI — SystemAdmin.jsx (roller/izinler) + Django JWT login
+// Neden ayri tablolar: Ekranda kullanici + string izin listesi vardi; backend RBAC icin
+// users, roles, permissions ve ara tablolar (user_roles, role_permissions) standart modeldir.
+// audit_logs: Kim ne yapti; user_id opsiyonel (gecis doneminde sade etiket de tutulabilir).
+// Baglanti: users <- user_roles -> roles <- role_permissions -> permissions
+// -----------------------------------------------------------------------------
+Table users {
+  id bigint [pk, increment, note: 'Django User PK ile eşleşir']
+  username varchar(150) [unique, not null]
+  email varchar(254) [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table roles {
+  id bigint [pk, increment]
+  code varchar(64) [unique, not null, note: 'örn. SuperAdmin, Reception']
+  name varchar(128) [not null]
+}
+
+Table permissions {
+  id bigint [pk, increment]
+  code varchar(64) [unique, not null, note: 'örn. PanelAccess, Reservations']
+  description varchar(255)
+}
+
+Table user_roles {
+  user_id bigint [ref: > users.id, not null]
+  role_id bigint [ref: > roles.id, not null]
+  Indexes {
+    (user_id, role_id) [unique]
+  }
+}
+
+Table role_permissions {
+  role_id bigint [ref: > roles.id, not null]
+  permission_id bigint [ref: > permissions.id, not null]
+  Indexes {
+    (role_id, permission_id) [unique]
+  }
+}
+
+Table audit_logs {
+  id bigint [pk, increment]
+  occurred_at timestamptz [not null, default: `now()`]
+  user_label varchar(128) [note: 'UI string; prod’da user_id FK']
+  user_id bigint [ref: > users.id]
+  module varchar(64)
+  action varchar(32) [note: 'create, update, delete']
+  message text
+}
+
+// -----------------------------------------------------------------------------
+// TESIS (PROPERTY) — CRS.jsx, useAppStore.selectedHotelId, login branch
+// Neden: Tek veritabaninda birden fazla otel; tum operasyonel tablolar hotel_id ile filtrelenir.
+// hotels.code: Uygulamada secilen sube kodu ile esleme (ornek: sube kimligi).
+// Zincir genislemesi: crs_sync_logs zincir genelinde islem tarihcesi tutar (hangi tesisten kim aktarildi).
+// -----------------------------------------------------------------------------
+Table hotels {
+  id uuid [pk, default: `gen_random_uuid()`]
+  code varchar(32) [unique, note: 'branch kodu — login’deki branch ile eşleşebilir']
+  name varchar(255) [not null]
+  city varchar(128)
+  property_type varchar(32) [note: 'City, Resort, Boutique, Mountain']
+  capacity_rooms int
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// ODA TIPLERI & ODALAR — HotelContext initialRooms
+// Neden ikiye bolduk: UI'da her odada "type: Standard" string vardi; fiyat ve kontenjan tip bazinda
+// yonetilir (room_types). rooms fizik birim (oda numarasi + kat + anlik doluluk/temizlik).
+// Baglanti: rooms.room_type_id -> room_types. reservations.room_type_id: satilan paket tipi (tip degisse bile).
+// occupancy_status / clean_status: HK ve on buro ekranlarinin iki ekseni (dolu/bos vs temiz/kirli).
+// -----------------------------------------------------------------------------
+Table room_types {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  code varchar(32) [not null, note: 'Standard, Deluxe, Suite, Penthouse']
+  name varchar(128) [not null]
+  default_rate decimal(12,2)
+  max_occupancy int
+  Indexes {
+    (hotel_id, code) [unique]
+  }
+}
+
+Enum room_occupancy_status {
+  vacant
+  occupied
+  out_of_order
+}
+
+Enum housekeeping_clean_status {
+  clean
+  dirty
+}
+
+Table rooms {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  room_type_id uuid [ref: > room_types.id, not null]
+  room_number varchar(16) [not null, note: '101, 205']
+  floor int
+  occupancy_status room_occupancy_status [not null, default: 'vacant']
+  clean_status housekeeping_clean_status [not null, default: 'clean']
+  Indexes {
+    (hotel_id, room_number) [unique]
+  }
+}
+
+// -----------------------------------------------------------------------------
+// SATIS KANALLARI — rezervasyonlardaki channel: "Booking.com", "Direkt" vb.
+// Neden tablo: Kanal adi serbest metin yerine FK olunca raporlama, komisyon ve CM eslemesi kolaylasir.
+// Baglanti: reservations.channel_id -> channels. (ChannelManager ayarlari ayrica asagida.)
+// -----------------------------------------------------------------------------
+Table channels {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id]
+  name varchar(128) [not null, note: 'Booking.com, Expedia, Direkt, TUI, HotelRunner']
+  code varchar(32)
+}
+
+// -----------------------------------------------------------------------------
+// MISAFIR — HotelContext initialGuests, GuestCRM
+// guest_id: Profilli musteri. primary_guest_name (rezervasyonda): Profil yokken veya gecici isim.
+// loyalty_tier: Sadakat programi. display_code (G-001): Eski UI kodu; raporlarda okunabilirlik.
+// hotel_id nullable tasarim: Zincir CRM'inde misafir tek kart, tesisler arasi paylasilabilir (istege bagli).
+// -----------------------------------------------------------------------------
+Enum loyalty_tier {
+  None
+  Silver
+  Gold
+  Platinum
+}
+
+Table guests {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, note: 'misafir genelde global; null = zincir çaprazı']
+  display_code varchar(32) [unique, note: 'UI G-001']
+  full_name varchar(255) [not null]
+  nationality char(2)
+  phone varchar(64)
+  email varchar(254)
+  loyalty_tier loyalty_tier [not null, default: 'None']
+  visit_count int [not null, default: 0]
+  total_spent decimal(14,2) [not null, default: 0]
+  last_visit_date date
+  birth_date date
+  national_id varchar(32) [note: 'TC']
+  passport_no varchar(32)
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Enum board_basis {
+  BB
+  HB
+  AI
+}
+
+Enum reservation_status {
+  upcoming
+  checked_in
+  checked_out
+  cancelled
+}
+
+// -----------------------------------------------------------------------------
+// REZERVASYON — HotelContext initialReservations
+// Ana bag: hotel_id, guest_id (opsiyonel), room_id (atanmis oda), room_type_id (satilan tip), channel_id.
+// Tutar alanlari: total / paid / balance — UI ile ayni mantik; folio satirlariyla senkron tutulmali.
+// status: UI'daki gelecek/check-in/check-out ile eslestirildi (upcoming/checked_in/checked_out).
+// -----------------------------------------------------------------------------
+Table reservations {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'UI RES-001']
+  guest_id uuid [ref: > guests.id]
+  primary_guest_name varchar(255) [not null, note: 'walk-in için isim']
+  room_id uuid [ref: > rooms.id]
+  room_type_id uuid [ref: > room_types.id, note: 'rezervasyon anındaki tip']
+  channel_id uuid [ref: > channels.id]
+  check_in_date date [not null]
+  check_out_date date [not null]
+  nights int [not null]
+  adults int [not null, default: 1]
+  status reservation_status [not null]
+  board_basis board_basis
+  total_amount decimal(14,2) [not null, default: 0]
+  paid_amount decimal(14,2) [not null, default: 0]
+  balance_amount decimal(14,2) [not null, default: 0]
+  notes text
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// FOLYO — HotelContext folioLines (sozluk: resId -> satir listesi)
+// Neden folios tablosu: Rezervasyon basina tek hesap (konaklama hesabi). ref: - reservations.id = bire bir.
+// folio_lines: Konaklama, minibar, SPA vb. kalemler; source_module hangi modulun yazdigini ayirt eder.
+// Not: Odeme satiri da buraya dusurulebilir veya ayri payments tablosunda tutulur (is kurali secimi).
+// -----------------------------------------------------------------------------
+Enum folio_line_type {
+  accommodation
+  extra
+  tax
+  payment
+}
+
+Table folios {
+  id uuid [pk, default: `gen_random_uuid()`]
+  reservation_id uuid [ref: - reservations.id, unique, not null]
+  currency char(3) [not null, default: 'TRY']
+  opened_on date [not null]
+  closed_on date
+}
+
+Table folio_lines {
+  id uuid [pk, default: `gen_random_uuid()`]
+  folio_id uuid [ref: > folios.id, not null]
+  line_type folio_line_type [not null]
+  description varchar(512) [not null]
+  amount decimal(14,2) [not null]
+  posted_date date [not null]
+  source_module varchar(32) [note: 'POS, SPA, Minibar, Laundry']
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// ODEME & KASA — CashDesk, HotelContext cashTransactions / makePayment
+// cash_transactions: Gunluk kasa defteri (gelir/gider); rezervasyonla baglanabilir veya genel gider.
+// payments: Belirli rezervasyona yapilan tahsilat; istenirse olusturulan kasa satiriyla (cash_transaction_id) eslenir.
+// Iki tablo: Biri muhasebe gunluk gorunumu, digeri musteri borc kapama — cift kayit icin transaction kullanilir.
+// -----------------------------------------------------------------------------
+Enum cash_flow_type {
+  income
+  expense
+}
+
+Enum payment_method {
+  cash
+  credit_card
+  eft
+  other
+}
+
+Table cash_transactions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'C-001']
+  flow_type cash_flow_type [not null]
+  description varchar(512) [not null]
+  amount decimal(14,2) [not null]
+  method payment_method
+  tx_date date [not null]
+  tx_time time
+  reservation_id uuid [ref: > reservations.id]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table payments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  reservation_id uuid [ref: > reservations.id, not null]
+  amount decimal(14,2) [not null]
+  method payment_method [not null]
+  paid_at timestamptz [not null, default: `now()`]
+  cash_transaction_id uuid [ref: > cash_transactions.id]
+}
+
+// -----------------------------------------------------------------------------
+// IK — HotelContext initialStaff (departments + staff_members)
+// Neden once: operational_tasks.assignee_staff_id FK icin staff_members tanimli olmali.
+// departments: Kat hizmetleri, SPA, Resepsiyon vb. staff_members: gorev atama ve HK ekranlari.
+// -----------------------------------------------------------------------------
+Enum staff_status {
+  active
+  on_leave
+  inactive
+}
+
+Table departments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  name varchar(128) [not null]
+}
+
+Table staff_members {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  department_id uuid [ref: > departments.id]
+  display_code varchar(32) [unique, note: 'HR-001']
+  full_name varchar(255) [not null]
+  job_title varchar(128)
+  shift_window varchar(32)
+  status staff_status [not null]
+  phone varchar(64)
+  hire_date date
+  monthly_wage decimal(12,2)
+}
+
+// -----------------------------------------------------------------------------
+// OPERASYONEL GOREVLER — Housekeeping, TechService (HotelContext tasks)
+// category: housekeeping | technical. room_id: Hangi oda. assignee_staff_id: Hangi personel.
+// Check-out sonrasi temizlik gibi olaylar rezervasyon aksiyonundan gorev uretir (uygulama katmani).
+// -----------------------------------------------------------------------------
+Enum task_category {
+  housekeeping
+  technical
+}
+
+Enum task_status {
+  pending
+  in_progress
+  done
+}
+
+Table operational_tasks {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'T-001']
+  category task_category [not null]
+  room_id uuid [ref: > rooms.id]
+  title varchar(512) [not null]
+  priority varchar(16)
+  status task_status [not null]
+  assignee_staff_id uuid [ref: > staff_members.id, note: 'nullable']
+  note text
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// BILDIRIMLER — Header bildirim listesi (uyari/bilgi/basari)
+// Genelde kullaniciya veya otel geneline; kalici audit icin audit_logs dusunun.
+// -----------------------------------------------------------------------------
+Table notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id]
+  notif_type varchar(16) [note: 'warn, info, success']
+  message text [not null]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// RESTORAN — RestaurantPOS, MENU_ITEMS, HotelContext restaurantOrders
+// menu_categories / menu_items: Fiyat listesi. restaurant_orders: Masa veya oda servisi.
+// reservation_id: Oda servisi folioya yazilir; masa siparisi kasaya (cash) gidebilir — UI mantigi.
+// restaurant_order_lines: menu_item_id + snapshot (fiyat degisse gecmis siparis bozulmasin).
+// -----------------------------------------------------------------------------
+Table menu_categories {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  name varchar(128) [not null]
+}
+
+Table menu_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  category_id uuid [ref: > menu_categories.id]
+  display_code varchar(32) [note: 'M-01']
+  name varchar(255) [not null]
+  unit_price decimal(12,2) [not null]
+}
+
+Enum restaurant_order_status {
+  preparing
+  ready
+  completed
+}
+
+Table restaurant_orders {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'ORD-001']
+  table_label varchar(64) [note: 'Masa 3 veya null']
+  room_id uuid [ref: > rooms.id]
+  reservation_id uuid [ref: > reservations.id]
+  status restaurant_order_status [not null]
+  total_amount decimal(12,2) [not null]
+  order_date date [not null]
+  order_time time
+}
+
+Table restaurant_order_lines {
+  id uuid [pk, default: `gen_random_uuid()`]
+  order_id uuid [ref: > restaurant_orders.id, not null]
+  menu_item_id uuid [ref: > menu_items.id]
+  item_name varchar(255) [not null, note: 'snapshot']
+  quantity int [not null]
+  unit_price decimal(12,2) [not null]
+  line_total decimal(12,2) [not null]
+}
+
+// -----------------------------------------------------------------------------
+// SPA — SpaManagement, SPA_SERVICES, spaAppointments
+// spa_services: Hizmet katalogu. spa_appointments: Randevu; reservation_id opsiyonel (sade misafir adi ile de acilabilir).
+// Tamamlaninca folioya satir eklenir (uygulama); service_name_snapshot fiyat degisimine karsi.
+// -----------------------------------------------------------------------------
+Table spa_services {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  name varchar(255) [not null]
+  default_price decimal(12,2) [not null]
+  default_therapist varchar(128)
+}
+
+Enum spa_appointment_status {
+  scheduled
+  completed
+  cancelled
+}
+
+Table spa_appointments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'SPA-001']
+  guest_name varchar(255) [not null]
+  room_id uuid [ref: > rooms.id]
+  reservation_id uuid [ref: > reservations.id, note: 'SPA: reservation_id opsiyonel']
+  spa_service_id uuid [ref: > spa_services.id]
+  service_name_snapshot varchar(255) [not null]
+  therapist_name varchar(128)
+  appointment_date date [not null]
+  appointment_time time
+  status spa_appointment_status [not null]
+  price decimal(12,2) [not null]
+}
+
+// -----------------------------------------------------------------------------
+// MINIBAR — minibarCharges, MINIBAR_ITEMS
+// minibar_products: Stok/fiyat. minibar_charges: Oda bazinda toplu sayim; charge_lines kalemler.
+// reservation_id: Konaklayan hesaba yazmak icin. billed_to_folio: Folioya aktarildi mi.
+// -----------------------------------------------------------------------------
+Table minibar_products {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32)
+  name varchar(255) [not null]
+  category varchar(64)
+  unit_price decimal(12,2) [not null]
+}
+
+Table minibar_charges {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  room_id uuid [ref: > rooms.id, not null]
+  reservation_id uuid [ref: > reservations.id]
+  charge_date date [not null]
+  total_amount decimal(12,2) [not null]
+  billed_to_folio boolean [not null, default: false]
+}
+
+Table minibar_charge_lines {
+  id uuid [pk, default: `gen_random_uuid()`]
+  charge_id uuid [ref: > minibar_charges.id, not null]
+  product_id uuid [ref: > minibar_products.id]
+  name_snapshot varchar(255) [not null]
+  quantity int [not null]
+  unit_price decimal(12,2) [not null]
+}
+
+// -----------------------------------------------------------------------------
+// CAMASIRHANE — laundryOrders, LAUNDRY_ITEMS
+// laundry_pricelist_items: Birim fiyat. laundry_orders: Oda + misafir + durum akisi.
+// Teslimde folioya ekleme (UI updateLaundryOrder) backend'de ayni kural ile yapilir.
+// -----------------------------------------------------------------------------
+Table laundry_pricelist_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  name varchar(128) [not null]
+  unit_price decimal(12,2) [not null]
+}
+
+Enum laundry_order_status {
+  pending
+  washing
+  ready
+  delivered
+}
+
+Table laundry_orders {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  room_id uuid [ref: > rooms.id, not null]
+  reservation_id uuid [ref: > reservations.id]
+  guest_name varchar(255) [not null]
+  order_date date [not null]
+  ordered_time time
+  status laundry_order_status [not null]
+  total_amount decimal(12,2) [not null]
+}
+
+Table laundry_order_lines {
+  id uuid [pk, default: `gen_random_uuid()`]
+  laundry_order_id uuid [ref: > laundry_orders.id, not null]
+  pricelist_item_id uuid [ref: > laundry_pricelist_items.id]
+  name_snapshot varchar(128) [not null]
+  quantity int [not null]
+  unit_price decimal(12,2) [not null]
+}
+
+// -----------------------------------------------------------------------------
+// STOK (HK ENVANTER) — HotelContext inventory
+// Minibar/stok modulunden farkli: sarf malzeme (havlu, deterjan). procurement ile tedarik tamamlanir.
+// -----------------------------------------------------------------------------
+Table inventory_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32)
+  name varchar(255) [not null]
+  category varchar(64)
+  unit varchar(32)
+  quantity_on_hand decimal(12,2) [not null]
+  min_quantity decimal(12,2) [not null]
+  unit_cost decimal(12,2)
+}
+
+// -----------------------------------------------------------------------------
+// KBS — HotelContext kbsSent (polis/misafir bildirimi)
+// Her kayit bir rezervasyon/konaklamaya bagli; gonderim zamanı ve kimlik alanlari yasal saklama icin.
+// -----------------------------------------------------------------------------
+Table kbs_guest_submissions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  reservation_id uuid [ref: > reservations.id, not null]
+  sent_at timestamptz [not null]
+  national_id varchar(32)
+  passport_no varchar(32)
+  nationality char(2)
+}
+
+// -----------------------------------------------------------------------------
+// GRUP REZERVASYON — GroupReservations.jsx (blokaj, toplu oda)
+// Ayri tablo: Tekil reservations ile karisabilir; ileride group_booking_id FK'si reservations'a eklenebilir
+// veya grup altinda coklu rezervasyon satiri tasarlanir. Simdiki mock toplu metrik tutuyor.
+// -----------------------------------------------------------------------------
+Enum group_booking_status {
+  pending
+  confirmed
+  active
+  completed
+  cancelled
+}
+
+Table group_bookings {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'GRP-001']
+  name varchar(255) [not null]
+  leader_name varchar(255)
+  phone varchar(64)
+  pax_total int [not null]
+  rooms_blocked int [not null]
+  check_in date [not null]
+  check_out date [not null]
+  status group_booking_status [not null]
+  total_amount decimal(14,2) [not null]
+  paid_amount decimal(14,2) [not null, default: 0]
+  board_basis board_basis
+  notes text
+}
+
+// -----------------------------------------------------------------------------
+// ZIYAFET / ETKINLIK — BanquetEvents.jsx (salon, dugun, toplanti)
+// Konaklama rezervasyonundan bagimsiz gelir kalemi; odeme ve durum kendi icinde.
+// Ileride banquet_events ile folio veya invoice baglanabilir.
+// -----------------------------------------------------------------------------
+Enum banquet_event_status {
+  pending
+  approved
+  in_progress
+  completed
+  cancelled
+}
+
+Table banquet_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'EV-001']
+  name varchar(255) [not null]
+  event_type varchar(64)
+  hall_name varchar(128)
+  event_date date [not null]
+  start_time time
+  pax int [not null]
+  status banquet_event_status [not null]
+  total_amount decimal(14,2) [not null]
+  paid_amount decimal(14,2) [not null, default: 0]
+  contact_name varchar(255)
+  phone varchar(64)
+  email varchar(254)
+  notes text
+}
+
+// -----------------------------------------------------------------------------
+// KAYIP BULUNTU — LostAndFound.jsx
+// Misafir kartina FK eklenebilir; simdiki mock sadece teslim alan isim tutuyor.
+// -----------------------------------------------------------------------------
+Enum lost_found_status {
+  waiting
+  returned
+}
+
+Table lost_found_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  title varchar(255) [not null]
+  category varchar(64)
+  location_found varchar(255)
+  description text
+  found_date date [not null]
+  status lost_found_status [not null]
+  returned_to_guest_name varchar(255)
+}
+
+// -----------------------------------------------------------------------------
+// ACENTA SOZLESME & TARIFE — AgencyContracts.jsx
+// travel_agencies: Acenta ana karti. agency_contract_rates: Tarih araligi + oda tipi + para birimi + pansiyon.
+// agency_promotions: Kampanya metni; rezervasyonla otomatik baglanti ileride kurulabilir.
+// Not: commercial_contracts tablosundan farkli — burada tur operasyonu B2B tarife odakli.
+// -----------------------------------------------------------------------------
+Table travel_agencies {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'AG-001']
+  name varchar(255) [not null]
+  contact_name varchar(255)
+  phone varchar(64)
+  email varchar(254)
+  commission_percent decimal(5,2)
+  agency_status varchar(16) [note: 'aktif, yeni, pasif']
+}
+
+Table agency_contract_rates {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agency_id uuid [ref: > travel_agencies.id, not null]
+  valid_from date [not null]
+  valid_to date [not null]
+  room_type_label varchar(128) [not null]
+  price decimal(12,2) [not null]
+  currency char(3) [not null]
+  board_basis board_basis
+}
+
+Table agency_promotions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agency_id uuid [ref: > travel_agencies.id, not null]
+  name varchar(255) [not null]
+  description text
+  promo_status varchar(16)
+  valid_until date
+}
+
+// -----------------------------------------------------------------------------
+// GENEL MUHASEBE — Accounting.jsx
+// gl_accounts: Hesap plani (varlik/gelir/gider). journal_entries: UI'daki basit tek satir yevmiye.
+// Gercek cift taraf muhasebe icin: journal_entry baslik + journal_lines (borc/alacak hesap) eklenmeli;
+// account_code alani gecis icin not olarak birakildi.
+// -----------------------------------------------------------------------------
+Enum gl_account_type {
+  asset
+  liability
+  revenue
+  expense
+  equity
+}
+
+Table gl_accounts {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  code varchar(32) [not null]
+  name varchar(255) [not null]
+  account_type gl_account_type [not null]
+  balance decimal(16,2) [not null, default: 0]
+  Indexes {
+    (hotel_id, code) [unique]
+  }
+}
+
+Table journal_entries {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'JV-001']
+  entry_date date [not null]
+  description varchar(512) [not null]
+  debit_amount decimal(16,2)
+  credit_amount decimal(16,2)
+  account_code varchar(32) [note: 'UI basit satır; prod’da journal_lines + çift kayıt']
+}
+
+// -----------------------------------------------------------------------------
+// E-FATURA — Finance.jsx
+// Tablo adi invoices: Stok tablosu inventory_items ile karismasin diye (UI'da ikisi de INV kodu kullaniyordu).
+// Musteri/tedarikci fatura takibi; odeme durumu payment_status.
+// -----------------------------------------------------------------------------
+Enum invoice_type {
+  sale
+  purchase
+  refund
+}
+
+Enum invoice_payment_status {
+  unpaid
+  paid
+}
+
+Table invoices {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  invoice_number varchar(64) [unique, not null, note: 'INV-2026-001']
+  invoice_type invoice_type [not null]
+  category varchar(64)
+  customer_name varchar(255) [not null]
+  amount decimal(14,2) [not null]
+  invoice_date date [not null]
+  payment_status invoice_payment_status [not null]
+  tax_id varchar(32) [note: 'VKN']
+}
+
+// -----------------------------------------------------------------------------
+// TICARI SOZLESME — Contracts.jsx (OTA, kurumsal, tedarik genel)
+// partner_name + tarih araligi + durum. travel_agencies'den farkli: hukuki/genel sozlesme metni odakli.
+// -----------------------------------------------------------------------------
+Enum commercial_contract_status {
+  active
+  review
+  expiring
+  ended
+}
+
+Table commercial_contracts {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'CNT-001']
+  title varchar(255) [not null]
+  partner_name varchar(255) [not null]
+  contract_kind varchar(32) [note: 'OTA, Acenta, Kurumsal, Tedarikçi']
+  start_date date [not null]
+  end_date date [not null]
+  pricing_terms varchar(255) [note: 'UI serbest metin']
+  status commercial_contract_status [not null]
+  notes text
+}
+
+// -----------------------------------------------------------------------------
+// SATIS & PAZARLAMA — SalesMarketing.jsx
+// sales_leads: Pipeline asamalari. marketing_campaigns: Kampanya ve rezervasyon sayaci (attribusyon ileride).
+// -----------------------------------------------------------------------------
+Enum sales_lead_stage {
+  new_lead
+  meeting
+  proposal
+  won
+  lost
+}
+
+Table sales_leads {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'L-001']
+  account_name varchar(255) [not null]
+  contact_name varchar(255)
+  phone varchar(64)
+  estimated_value decimal(14,2) [not null]
+  probability_percent int
+  stage sales_lead_stage [not null]
+  created_date date [not null]
+  notes text
+}
+
+Table marketing_campaigns {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'C-001']
+  title varchar(255) [not null]
+  target_segment varchar(64)
+  accent_color varchar(16)
+  campaign_status varchar(16) [note: 'aktif']
+  reservation_count int [not null, default: 0]
+}
+
+// -----------------------------------------------------------------------------
+// TUR & TRANSFER — TourManagement.jsx
+// tour_offers ve guest_transfers ayri: Biri tur paketi, digeri havalimani transferi.
+// Ileride guest_id / reservation_id ile sikilastirilabilir.
+// -----------------------------------------------------------------------------
+Table tour_offers {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'TR-101']
+  name varchar(255) [not null]
+  tour_kind varchar(64)
+  guest_name varchar(255) [not null]
+  tour_date date [not null]
+  pax int [not null]
+  status varchar(32)
+  price decimal(12,2) [not null]
+}
+
+Table guest_transfers {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'TF-201']
+  direction varchar(16) [note: 'Geliş / Gidiş']
+  guest_name varchar(255) [not null]
+  location_label varchar(255)
+  flight_code varchar(32)
+  transfer_date date [not null]
+  transfer_time time
+  vehicle_label varchar(64)
+  status varchar(32)
+}
+
+// -----------------------------------------------------------------------------
+// MALIYET KONTROL — CostControl.jsx (mutfak reçete + zayi)
+// recipes: Maliyet vs menu satis fiyati. food_waste_logs: Fire/zayi mali etki.
+// -----------------------------------------------------------------------------
+Table recipes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  name varchar(255) [not null]
+  cost_amount decimal(12,2) [not null]
+  menu_price decimal(12,2) [not null]
+  ingredients_text text
+}
+
+Table food_waste_logs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  item_description varchar(255) [not null]
+  reason varchar(128)
+  loss_amount decimal(12,2) [not null]
+  waste_date date [not null]
+}
+
+// -----------------------------------------------------------------------------
+// BUTCE — BudgetPlanning.jsx
+// Departman bazinda butce vs gerceklesen; mali yil fiscal_year ile ayrilir.
+// -----------------------------------------------------------------------------
+Table department_budgets {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  department_name varchar(255) [not null]
+  fiscal_year int [not null]
+  budget_amount decimal(16,2) [not null]
+  actual_amount decimal(16,2) [not null]
+}
+
+// -----------------------------------------------------------------------------
+// ENTERTAINMENT — Entertainment.jsx (aktivite + gosteri)
+// day_label / show_date_label: UI metin tabanli; takvim entegrasyonunda date alanina donusturulebilir.
+// -----------------------------------------------------------------------------
+Table entertainment_activities {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  name varchar(255) [not null]
+  start_time time
+  end_time time
+  location_name varchar(128)
+  category varchar(64)
+  day_label varchar(32) [note: 'Bugün / Yarın']
+  status varchar(32)
+  participant_count int [not null, default: 0]
+}
+
+Table entertainment_shows {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  title varchar(255) [not null]
+  show_date_label varchar(32) [note: 'UI metin; prod’da date']
+  start_time time
+  icon varchar(8)
+}
+
+// -----------------------------------------------------------------------------
+// KVKK — KVKK.jsx (riza kayitlari)
+// Misafir bazinda izin turu ve durum; guests ile guest_id FK eklenebilir.
+// -----------------------------------------------------------------------------
+Table kvkk_consents {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique]
+  guest_name varchar(255) [not null]
+  consent_type varchar(64) [not null]
+  consent_status varchar(16) [not null]
+  record_date date [not null]
+  recorded_by varchar(64)
+  note text
+}
+
+// -----------------------------------------------------------------------------
+// CRS SENKRON LOG — CRS.jsx
+// Zincir genelinde yapilan islemler (transfer, senkron); hotels ile siki FK opsiyonel (chain_id).
+// -----------------------------------------------------------------------------
+Table crs_sync_logs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  chain_id uuid [note: 'isteğe bağlı zincir']
+  action varchar(255) [not null]
+  from_label varchar(128)
+  to_label varchar(128)
+  guest_or_ref varchar(255)
+  outcome varchar(32) [not null]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// ENTEGRASYONLAR — Integrations.jsx
+// integration_connections: Harici sistem (Stripe, KBS, kilit). api_key_ref: Gercek anahtar vault'ta tutulur.
+// integration_event_logs: Teknik olay gunlugu (basari/hata); sorun giderme icin.
+// -----------------------------------------------------------------------------
+Table integration_connections {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id]
+  display_code varchar(32) [unique]
+  name varchar(255) [not null]
+  integration_kind varchar(64)
+  connection_status varchar(16) [note: 'connected, error']
+  api_key_ref varchar(128) [note: 'gerçek anahtar vault’ta']
+  last_sync_label varchar(64)
+}
+
+Table integration_event_logs {
+  id bigint [pk, increment]
+  integration_id uuid [ref: > integration_connections.id]
+  service_code varchar(64)
+  event_type varchar(128)
+  outcome varchar(32)
+  meta text
+  occurred_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// SATIN ALMA — Procurement.jsx
+// Tedarikci siparisi; inventory_items stok girisi ile sonradan baglanabilir (ayni PO referansi).
+// -----------------------------------------------------------------------------
+Enum purchase_order_status {
+  pending
+  approval
+  in_transit
+  received
+  cancelled
+}
+
+Table purchase_orders {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  display_code varchar(32) [unique, note: 'PO-001']
+  item_description varchar(512) [not null]
+  supplier_name varchar(255) [not null]
+  category varchar(64)
+  amount decimal(14,2) [not null]
+  order_date date [not null]
+  status purchase_order_status [not null]
+}
+
+// -----------------------------------------------------------------------------
+// ANKET / GERI BILDIRIM — Surveys.jsx
+// Misafir puan/yorum; ileride survey_template_id ve soru bazli yapı genisletilebilir.
+// -----------------------------------------------------------------------------
+Table guest_feedback_entries {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, not null]
+  guest_name varchar(255) [not null]
+  room_number varchar(16)
+  score int [not null]
+  comment text
+  category varchar(64)
+  submitted_at timestamptz [not null, default: `now()`]
+}
+
+// -----------------------------------------------------------------------------
+// KANAL YONETICISI AYARLARI — ChannelManager.jsx
+// Otel basina tek satir (hotel_id unique): Sattiğiniz standart fiyatlar + stop-sale bayraklari.
+// Kanal listesi (Booking, Expedia) UI sabitiydi; rezervasyonlar channels tablosu ile hizalanir.
+// -----------------------------------------------------------------------------
+Table channel_manager_settings {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hotel_id uuid [ref: > hotels.id, unique, not null]
+  rate_standard decimal(12,2)
+  rate_deluxe decimal(12,2)
+  rate_suite decimal(12,2)
+  rate_family decimal(12,2)
+  stop_sale_single boolean [not null, default: false]
+  stop_sale_double boolean [not null, default: false]
+  stop_sale_triple boolean [not null, default: false]
+  updated_at timestamptz [not null, default: `now()`]
+}
