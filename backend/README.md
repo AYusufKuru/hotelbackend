@@ -70,7 +70,7 @@ Ayrıntı: `../admin/README.md`.
 
 ## Vercel’e deploy
 
-1. [Vercel](https://vercel.com)’de yeni proje: bu Git repo’yu bağla. **Root Directory** `backend` olmalı (kök sadece `backend/` altında `manage.py` varsa).
+1. [Vercel](https://vercel.com)’de yeni proje: bu Git repo’yu bağla. Repo kökünde de `../manage.py` eklendiği için **Root Directory** `backend` zorunlu değil (`.` / boş bırakılabilir). İkisi de çalışır.
 2. Proje depolama: [Vercel Storage Postgres](https://vercel.com/docs/storage) veya Neon/Supabase vb. bir **PostgreSQL** bağla; Vercel otomatik `DATABASE_URL` (veya sen aynı isimle) env verir. Sunucusuz ortamda **kalıcı SQLite yok.**
 3. Vercel **Environment variables** (Production / Preview ayrı ayrı isteğe göre):
    - `DJANGO_SECRET_KEY` — üretim için güçlü, gizli anahtar (zorunlu)

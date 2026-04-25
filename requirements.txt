@@ -1,0 +1,2 @@
+# Repo kökü: Vercel / pip; asıl bağımlılıklar backend/ altında
+-r backend/requirements.txt

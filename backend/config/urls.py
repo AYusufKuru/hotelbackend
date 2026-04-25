@@ -15,9 +15,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.http import HttpRequest, HttpResponse
 from django.urls import include, path
 
+
+def root_status(_request: HttpRequest) -> HttpResponse:
+    return HttpResponse("Hotel CRM API — /api/ ve /admin/ kullanın.", content_type="text/plain; charset=utf-8")
+
+
 urlpatterns = [
+    path("", root_status),
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
     path('api/', include('hotelcrm.urls')),
