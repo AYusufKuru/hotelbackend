@@ -129,13 +129,33 @@ if not _dsn or _dsn in ("null", "undefined", "None"):
 else:
     import dj_database_url
 
-    DATABASES = {
-        "default": dj_database_url.parse(
-            _dsn,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
+    try:
+        DATABASES = {
+            "default": dj_database_url.parse(
+                _dsn,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        }
+    except (ValueError, TypeError) as e:
+        # DSN hatalıysa uygulama açılmasın diye açık hata; yedek: /tmp sqlite
+        if _is_vercel:
+            _vercel_tmp = (os.environ.get("VERCEL_SQLITE_PATH", "/tmp") or "/tmp").rstrip(
+                os.sep
+            ) + f"{os.sep}hotelcrm.sqlite3"
+            DATABASES = {
+                "default": {
+                    "ENGINE": "django.db.backends.sqlite3",
+                    "NAME": _vercel_tmp,
+                }
+            }
+        else:
+            raise RuntimeError("DATABASE_URL okunamadı") from e
+
+# Sunucusuzda genelde `migrate` yok; DB oturumu tablo ister, her istek 500 edebilir.
+# JWT ana API, oturum çoğu istekte DB şart bırakmasın diye Vercel’de imzalı çerez.
+if _is_vercel:
+    SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
 
 # Password validation
