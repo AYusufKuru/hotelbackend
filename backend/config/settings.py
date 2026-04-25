@@ -252,7 +252,8 @@ if _is_vercel:
 if _is_vercel and not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    if os.environ.get("DJANGO_FORCE_SSL", "1") == "1":
+    # Vercel kenarı zaten HTTPS; bu redirect bazı proxy senaryolarında 500/loop tetikleyebiliyor
+    if os.environ.get("DJANGO_FORCE_SSL", "0") == "1":
         SECURE_SSL_REDIRECT = True
 
 # --- CORS ---
@@ -304,5 +305,28 @@ LICENSE_SERVER_URL = os.environ.get("LICENSE_SERVER_URL", "").strip().rstrip("/"
 LICENSE_KEY = os.environ.get("LICENSE_KEY", "").strip()
 _LICENSE_ENFORCE_RAW = os.environ.get("LICENSE_ENFORCE", "0").strip().lower()
 LICENSE_ENFORCE = _LICENSE_ENFORCE_RAW in ("1", "true", "yes", "on")
-LICENSE_CHECK_CACHE_SECONDS = int(os.environ.get("LICENSE_CHECK_CACHE_SECONDS", "120"))
-LICENSE_CHECK_TIMEOUT = float(os.environ.get("LICENSE_CHECK_TIMEOUT", "8"))
+
+
+def _env_int(name: str, default: int) -> int:
+    # Vercel’de değişken var ama değer boş string → int() patlamasın
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw, 10)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+LICENSE_CHECK_CACHE_SECONDS = _env_int("LICENSE_CHECK_CACHE_SECONDS", 120)
+LICENSE_CHECK_TIMEOUT = _env_float("LICENSE_CHECK_TIMEOUT", 8.0)
