@@ -71,7 +71,7 @@ Ayrıntı: `../admin/README.md`.
 ## Vercel’e deploy
 
 1. [Vercel](https://vercel.com)’de yeni proje: bu Git repo’yu bağla. Repo kökünde de `../manage.py` eklendiği için **Root Directory** `backend` zorunlu değil (`.` / boş bırakılabilir). İkisi de çalışır.
-2. Proje depolama: [Vercel Storage Postgres](https://vercel.com/docs/storage) veya Neon/Supabase vb. bir **PostgreSQL** bağla; Vercel otomatik `DATABASE_URL` (veya sen aynı isimle) env verir. Sunucusuz ortamda **kalıcı SQLite yok.**
+2. **Veritabanı:** Vercel projeye kendi başına Postgres oluşturmaz. Dashboard’da **Storage** → [Vercel Postgres](https://vercel.com/docs/postgres) (veya dış kaynak Neon/Supabase) oluşturup projeyle eşle; o zaman `DATABASE_URL` environment’a düşer. Dış veritabanı eklemeden 500 hatası çok sık **neden 1** salt okunur proje diski + local SQLite, **neden 2** tablolar yok (`migrate` çalışmamış). Eski ekran görüntülerinde `settings` satır 110 hatası da, deploy **henüz güncel koda** çekilmeden `dj_database_url` kaynaklanabilir—son kodu `git push` edip tekrar deploy edin. İdeal yol: Postgres ekle + lokal: `npx vercel@latest env pull` → `python manage.py migrate`.
 3. Vercel **Environment variables** (Production / Preview ayrı ayrı isteğe göre):
    - `DJANGO_SECRET_KEY` — üretim için güçlü, gizli anahtar (zorunlu)
    - `DATABASE_URL` — Postgres (veritabanı sağlayıcın adım adım eklemişse doldurulur)

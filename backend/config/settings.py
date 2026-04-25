@@ -103,15 +103,29 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-# Vercel bazen DATABASE_URL'yi boş dize olarak set eder; dj_database_url.config() bunu
-# parse edemeyip yıkılır. Sadece anlamlı DSN varken PostgreSQL kullan.
-_default_sqlite = {
-    "ENGINE": "django.db.backends.sqlite3",
-    "NAME": str(BASE_DIR / "db.sqlite3"),
-}
+# DATABASE_URL varsa: PostgreSQL (Vercel Postgres, Neon, Supabase …).
+# Yok + Vercel: proje dizini read-only; SQLite yalnız /tmp’de yazılabilir. Gerçek uygulama için
+# yine de Vercel’den “Postgres ekle + migrate” önerilir (aşağıdaki /tmp anlık/gecici denebilecek yol).
 _dsn = (os.environ.get("DATABASE_URL") or "").strip()
 if not _dsn or _dsn in ("null", "undefined", "None"):
-    DATABASES = {"default": _default_sqlite}
+    _local_sqlite = str(BASE_DIR / "db.sqlite3")
+    if _is_vercel:
+        _vercel_tmp = (os.environ.get("VERCEL_SQLITE_PATH", "/tmp") or "/tmp").rstrip(
+            os.sep
+        ) + f"{os.sep}hotelcrm.sqlite3"
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": _vercel_tmp,
+            }
+        }
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": _local_sqlite,
+            }
+        }
 else:
     import dj_database_url
 
