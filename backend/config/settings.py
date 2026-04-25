@@ -103,10 +103,21 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-# DATABASE_URL varsa: PostgreSQL (Vercel Postgres, Neon, Supabase …).
-# Yok + Vercel: proje dizini read-only; SQLite yalnız /tmp’de yazılabilir. Gerçek uygulama için
-# yine de Vercel’den “Postgres ekle + migrate” önerilir (aşağıdaki /tmp anlık/gecici denebilecek yol).
-_dsn = (os.environ.get("DATABASE_URL") or "").strip()
+# Otomatik env’ler: çoğunlukla DATABASE_URL; Vercel integration “STORAGE” öneki → STORAGE_URL
+# (Django/ dj-database-url sadece tek isim bilmek zorunda değil, hepsini dene)
+def _database_url_from_env() -> str:
+    for _key in (
+        "DATABASE_URL",
+        "STORAGE_URL",
+        "POSTGRES_URL",
+    ):
+        v = (os.environ.get(_key) or "").strip()
+        if v and v not in ("null", "undefined", "None"):
+            return v
+    return ""
+
+
+_dsn = _database_url_from_env()
 if not _dsn or _dsn in ("null", "undefined", "None"):
     _local_sqlite = str(BASE_DIR / "db.sqlite3")
     if _is_vercel:
