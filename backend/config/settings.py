@@ -14,8 +14,6 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-import dj_database_url
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -105,17 +103,25 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-# DATABASE_URL (örn. Vercel Postgres, Neon) varsa PostgreSQL; yoksa yerel SQLite
-DATABASES = {
-    "default": dj_database_url.config(
-        default={
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": str(BASE_DIR / "db.sqlite3"),
-        },
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+# Vercel bazen DATABASE_URL'yi boş dize olarak set eder; dj_database_url.config() bunu
+# parse edemeyip yıkılır. Sadece anlamlı DSN varken PostgreSQL kullan.
+_default_sqlite = {
+    "ENGINE": "django.db.backends.sqlite3",
+    "NAME": str(BASE_DIR / "db.sqlite3"),
 }
+_dsn = (os.environ.get("DATABASE_URL") or "").strip()
+if not _dsn or _dsn in ("null", "undefined", "None"):
+    DATABASES = {"default": _default_sqlite}
+else:
+    import dj_database_url
+
+    DATABASES = {
+        "default": dj_database_url.parse(
+            _dsn,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
 
 
 # Password validation
