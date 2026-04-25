@@ -78,7 +78,7 @@ Ayrıntı: `../admin/README.md`.
    - İsteğe: `DJANGO_CORS_EXTRA_ORIGINS` — web arayüzü URL’leri, virgülle (ör. `https://uydomain.com,https://www...`)
    - İsteğe: `DJANGO_DEBUG=1` — sadece hata ararken; normalde açık bırakma
 4. **İlk ve şema değişikliklerinde:** lokalde `npx vercel@latest link` (veya Vercel CLI) ile projeyi bağla, ardından `npx vercel@latest env pull` ile `.env.local` al; `cd backend` → `python manage.py migrate`. Gerekirse `createsuperuser` / `seed_demo_hotel`.
-5. Otomatik: Vercel Django için `collectstatic` çalıştırır; `STATIC_ROOT` `settings` içinde tanımlı.
+5. **Süper kullanıcı (deploy build’de):** Vercel **Environment variables** (Production) → `DJANGO_BOOTSTRAP_SUPERUSER=1`, `DJANGO_SUPERUSER_USERNAME=admin`, `DJANGO_SUPERUSER_PASSWORD=` *(parolayı sadece panele yaz; koda/ Git’e yazma)*, isteğe `DJANGO_SUPERUSER_EMAIL=...`. Yeni `vercel.json` `build` sırasında `migrate` + `ensure_bootstrap_user` + `collectstatic` çalışır; ilk seferde `admin` kullanıcısı oluşur. Kullanıcı varken şifreyi sadece `DJANGO_SUPERUSER_RESET_PASSWORD=1` ile (bir kez) yenilersin.
 
 Detay: [Vercel Django](https://vercel.com/docs/frameworks/full-stack/django).
 
