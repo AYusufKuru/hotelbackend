@@ -14,6 +14,9 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -101,13 +104,35 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+#
+# Vercel serverless: dosya sistemi çalışma anında salt okunur → SQLite burada yazılamaz
+# (admin girişi, oturum vb. "attempt to write a readonly database" verir).
+# Üretimde PostgreSQL bağlantı dizesi şart: Neon, Supabase, Vercel Postgres vb.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+_database_url = (os.environ.get("DATABASE_URL") or "").strip()
+_is_vercel = (os.environ.get("VERCEL") or "").strip() == "1"
+
+if _is_vercel and not _database_url:
+    raise ImproperlyConfigured(
+        "Vercel ortamında DATABASE_URL tanımlı olmalı (PostgreSQL). "
+        "SQLite bu platformda kalıcı yazıya izin vermez; ücretsiz veritabanı: Neon veya Supabase."
+    )
+
+if _database_url:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            _database_url,
+            conn_max_age=0,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation
