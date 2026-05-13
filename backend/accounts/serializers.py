@@ -11,5 +11,6 @@ class LoginSerializer(TokenObtainPairSerializer):
             "id": user.pk,
             "username": user.username,
             "email": user.email or "",
+            "is_superuser": user.is_superuser,
         }
         return data

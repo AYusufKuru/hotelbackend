@@ -68,15 +68,17 @@ def get_license_state() -> LicenseState:
     if not _endpoint() or not (getattr(settings, "LICENSE_KEY", "") or "").strip():
         return LicenseState(ok=True, reason="")
 
-    ttl = float(getattr(settings, "LICENSE_CHECK_CACHE_SECONDS", 120))
+    ttl = float(getattr(settings, "LICENSE_CHECK_CACHE_SECONDS", 30))
     now = time.monotonic()
     with _cache_lock:
         if now < float(_cache["until"]):
             return LicenseState(ok=bool(_cache["ok"]), reason=str(_cache["reason"] or ""))
 
     state = _fetch_remote()
+    # İzin verilen yanıt daha uzun önbelleklenebilir; reddedilen kısa sürede yeniden sorulsun (panelden düzeltme yansısın).
+    cache_ttl = max(5.0, ttl) if state.ok else max(5.0, min(15.0, ttl))
     with _cache_lock:
-        _cache["until"] = time.monotonic() + max(5.0, ttl)
+        _cache["until"] = time.monotonic() + cache_ttl
         _cache["ok"] = state.ok
         _cache["reason"] = state.reason
     return state

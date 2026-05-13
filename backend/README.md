@@ -68,20 +68,6 @@ Token yenileme: `POST /api/auth/refresh/` body: `{ "refresh": "<refresh_token>" 
 
 Ayrıntı: `../admin/README.md`.
 
-## Vercel’e deploy
-
-1. [Vercel](https://vercel.com)’de proje → **Settings** → **General** → **Root Directory** = **`backend`** (`backend/vercel.json` burada kullanılır). `could not import "config/wsgi.py"` hatası, bu kök yanlışken `config` paketinin bulunmamasındandır. Kaydet → **Deployments**’tan **Redeploy**. (Panelde eklemişsen `PYTHONPATH` artık gerekmez, silebilirsin.)
-2. **Veritabanı:** Vercel projeye kendi başına Postgres oluşturmaz. Dashboard’da **Storage** → [Vercel Postgres](https://vercel.com/docs/postgres) (veya dış kaynak Neon/Supabase) oluşturup projeyle eşle; o zaman `DATABASE_URL` environment’a düşer. Dış veritabanı eklemeden 500 hatası çok sık **neden 1** salt okunur proje diski + local SQLite, **neden 2** tablolar yok (`migrate` çalışmamış). Eski ekran görüntülerinde `settings` satır 110 hatası da, deploy **henüz güncel koda** çekilmeden `dj_database_url` kaynaklanabilir—son kodu `git push` edip tekrar deploy edin. İdeal yol: Postgres ekle + lokal: `npx vercel@latest env pull` → `python manage.py migrate`.
-3. Vercel **Environment variables** (Production / Preview ayrı ayrı isteğe göre):
-   - `DJANGO_SECRET_KEY` — üretim için güçlü, gizli anahtar (zorunlu)
-   - `DATABASE_URL` — Postgres (veritabanı sağlayıcın adım adım eklemişse doldurulur)
-   - İsteğe: `DJANGO_CORS_EXTRA_ORIGINS` — web arayüzü URL’leri, virgülle (ör. `https://uydomain.com,https://www...`)
-   - İsteğe: `DJANGO_DEBUG=1` — sadece hata ararken; normalde açık bırakma
-4. **İlk ve şema değişikliklerinde:** lokalde `npx vercel@latest link` (veya Vercel CLI) ile projeyi bağla, ardından `npx vercel@latest env pull` ile `.env.local` al; `cd backend` → `python manage.py migrate`. Gerekirse `createsuperuser` / `seed_demo_hotel`.
-5. **Süper kullanıcı (deploy build’de):** Vercel **Environment variables** (Production) → `DJANGO_BOOTSTRAP_SUPERUSER=1`, `DJANGO_SUPERUSER_USERNAME=admin`, `DJANGO_SUPERUSER_PASSWORD=` *(parolayı sadece panele yaz; koda/ Git’e yazma)*, isteğe `DJANGO_SUPERUSER_EMAIL=...`. Yeni `vercel.json` `build` sırasında `migrate` + `ensure_bootstrap_user` + `collectstatic` çalışır; ilk seferde `admin` kullanıcısı oluşur. Kullanıcı varken şifreyi sadece `DJANGO_SUPERUSER_RESET_PASSWORD=1` ile (bir kez) yenilersin.
-
-Detay: [Vercel Django](https://vercel.com/docs/frameworks/full-stack/django).
-
 ### Admin + backend aynı PC, desktop başka PC
 
 - **Desktop `api-config.json`:** Sadece **Django adresi** → `http://<API_PC_IP>:8000` (admin URL’si burada **yok**).

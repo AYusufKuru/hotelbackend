@@ -7,6 +7,28 @@ from .enums import BoardBasis, FolioLineType, ReservationStatus
 from .property_guest import Channel, Guest, Hotel, Room, RoomType
 
 
+class ReservationOccupant(models.Model):
+    """Konaklamadaki her misafir (birincil + ek kişiler) — rezervasyon `guest` ile birlikte kullanılır."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reservation = models.ForeignKey(
+        "Reservation",
+        on_delete=models.CASCADE,
+        related_name="occupants",
+    )
+    guest = models.ForeignKey(
+        Guest,
+        on_delete=models.CASCADE,
+        related_name="reservation_occupant_links",
+    )
+    is_primary = models.BooleanField(default=False)
+    sequence = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "hotelcrm_reservationoccupant"
+        ordering = ["sequence", "id"]
+
+
 class Reservation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="reservations")

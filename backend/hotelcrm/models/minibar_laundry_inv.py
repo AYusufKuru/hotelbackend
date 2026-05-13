@@ -107,6 +107,12 @@ class InventoryItem(models.Model):
     display_code = models.CharField(max_length=32, blank=True)
     name = models.CharField(max_length=255)
     category = models.CharField(max_length=64, blank=True)
+    warehouse = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Depo / lokasyon (örn. Ana depo, Mutfak, HK)",
+    )
     unit = models.CharField(max_length=32, blank=True)
     quantity_on_hand = models.DecimalField(max_digits=12, decimal_places=2)
     min_quantity = models.DecimalField(max_digits=12, decimal_places=2)

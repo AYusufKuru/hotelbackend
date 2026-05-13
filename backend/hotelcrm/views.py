@@ -21,8 +21,19 @@ def _viewset_for(model):
 def build_router():
     from rest_framework.routers import DefaultRouter
 
+    from .rbac_views import HotelModuleOverrideScopedViewSet, UserRoleScopedViewSet
+
     router = DefaultRouter()
+    skip_model = frozenset({"userrole", "hotelmoduleoverride"})
     for model in apps.get_app_config("hotelcrm").get_models():
+        if model._meta.model_name in skip_model:
+            continue
         prefix = model._meta.model_name.replace("_", "-")
         router.register(prefix, _viewset_for(model), basename=prefix)
+    router.register("userrole", UserRoleScopedViewSet, basename="userrole")
+    router.register(
+        "hotelmoduleoverride",
+        HotelModuleOverrideScopedViewSet,
+        basename="hotelmoduleoverride",
+    )
     return router

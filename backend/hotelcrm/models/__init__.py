@@ -1,15 +1,24 @@
-from .authz import AuditLog, Permission, Role, RolePermission, UserRole
+from .authz import (
+    AuditLog,
+    HotelModuleOverride,
+    Permission,
+    Role,
+    RolePermission,
+    UserRole,
+)
 from .enums import *  # noqa: F401,F403
 from .extended import (
     AgencyContractRate,
     AgencyPromotion,
     BanquetEvent,
+    BusinessPartner,
     ChannelManagerSettings,
     CommercialContract,
     CrsSyncLog,
     DepartmentBudget,
     EntertainmentActivity,
     EntertainmentShow,
+    FixedAsset,
     FoodWasteLog,
     GLAccount,
     GuestFeedbackEntry,
@@ -40,9 +49,9 @@ from .minibar_laundry_inv import (
     MinibarProduct,
 )
 from .payments_tasks import CashTransaction, Notification, OperationalTask, Payment
-from .property_guest import Channel, Guest, Hotel, Room, RoomType
-from .reservation_folio import Folio, FolioLine, Reservation
-from .staff import Department, StaffMember
+from .property_guest import Channel, CompetitorHotel, Guest, Hotel, Room, RoomType
+from .reservation_folio import Folio, FolioLine, Reservation, ReservationOccupant
+from .staff import Department, StaffAbsenceReport, StaffMember
 
 __all__ = [
     "AuditLog",
@@ -50,18 +59,22 @@ __all__ = [
     "Role",
     "RolePermission",
     "UserRole",
+    "HotelModuleOverride",
     "Hotel",
     "RoomType",
     "Channel",
     "Room",
     "Guest",
+    "CompetitorHotel",
     "Reservation",
+    "ReservationOccupant",
     "Folio",
     "FolioLine",
     "CashTransaction",
     "Payment",
     "Department",
     "StaffMember",
+    "StaffAbsenceReport",
     "OperationalTask",
     "Notification",
     "MenuCategory",
@@ -104,4 +117,6 @@ __all__ = [
     "PurchaseOrder",
     "GuestFeedbackEntry",
     "ChannelManagerSettings",
+    "FixedAsset",
+    "BusinessPartner",
 ]

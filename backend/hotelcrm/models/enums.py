@@ -1,4 +1,5 @@
 """DBML şemasındaki Enum karşılıkları (TextChoices)."""
+
 from django.db import models
 
 
@@ -11,6 +12,15 @@ class RoomOccupancyStatus(models.TextChoices):
 class HousekeepingCleanStatus(models.TextChoices):
     CLEAN = "clean", "Clean"
     DIRTY = "dirty", "Dirty"
+
+
+class RoomTypeBedLayout(models.TextChoices):
+    UNSPECIFIED = "unspecified", "Belirtilmedi"
+    DOUBLE_ONE = "double_one", "1 çift kişilik"
+    TWIN_TWO = "twin_two", "2 tek kişilik (Twin)"
+    DOUBLE_AND_SINGLE = "double_and_single", "1 çift + 1 tek"
+    TWO_DOUBLE = "two_double", "2 çift kişilik"
+    SINGLE_ONE = "single_one", "1 tek kişilik"
 
 
 class LoyaltyTier(models.TextChoices):
@@ -58,6 +68,14 @@ class StaffStatus(models.TextChoices):
     INACTIVE = "inactive", "Inactive"
 
 
+class StaffAbsenceReason(models.TextChoices):
+    SICK = "sick", "Hastalık / rapor"
+    ANNUAL = "annual", "Yıllık izin"
+    UNEXCUSED = "unexcused", "Mazeretsiz devamsızlık"
+    EXCUSED = "excused", "Mazeretli devamsızlık"
+    OTHER = "other", "Diğer"
+
+
 class TaskCategory(models.TextChoices):
     HOUSEKEEPING = "housekeeping", "Housekeeping"
     TECHNICAL = "technical", "Technical"
@@ -73,6 +91,7 @@ class RestaurantOrderStatus(models.TextChoices):
     PREPARING = "preparing", "Preparing"
     READY = "ready", "Ready"
     COMPLETED = "completed", "Completed"
+    CANCELLED = "cancelled", "Cancelled"
 
 
 class SpaAppointmentStatus(models.TextChoices):
@@ -86,6 +105,7 @@ class LaundryOrderStatus(models.TextChoices):
     WASHING = "washing", "Washing"
     READY = "ready", "Ready"
     DELIVERED = "delivered", "Delivered"
+    CANCELLED = "cancelled", "Cancelled"
 
 
 class GroupBookingStatus(models.TextChoices):

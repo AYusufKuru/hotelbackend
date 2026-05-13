@@ -94,10 +94,37 @@ class TravelAgency(models.Model):
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="travel_agencies")
     display_code = models.CharField(max_length=32, unique=True, null=True, blank=True)
     name = models.CharField(max_length=255)
+    legal_name = models.CharField(max_length=255, blank=True)
+    tax_office = models.CharField(max_length=128, blank=True)
+    tax_id = models.CharField(max_length=32, blank=True)
+    address = models.TextField(blank=True)
+    city = models.CharField(max_length=128, blank=True)
+    country = models.CharField(max_length=2, blank=True)
+    postal_code = models.CharField(max_length=24, blank=True)
+    website = models.URLField(max_length=500, blank=True)
+    tursab_license_no = models.CharField(max_length=64, blank=True)
+    iata_code = models.CharField(max_length=16, blank=True)
     contact_name = models.CharField(max_length=255, blank=True)
+    contact_title = models.CharField(max_length=128, blank=True)
     phone = models.CharField(max_length=64, blank=True)
+    secondary_phone = models.CharField(max_length=64, blank=True)
+    fax = models.CharField(max_length=64, blank=True)
     email = models.EmailField(blank=True)
+    billing_email = models.EmailField(blank=True)
     commission_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    payment_terms_days = models.PositiveIntegerField(null=True, blank=True)
+    payment_method = models.CharField(max_length=64, blank=True)
+    default_currency = models.CharField(max_length=3, blank=True)
+    credit_limit = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    minimum_stay_nights = models.PositiveSmallIntegerField(null=True, blank=True)
+    allotment_rooms = models.PositiveIntegerField(null=True, blank=True)
+    deposit_policy = models.TextField(blank=True)
+    cancellation_policy = models.TextField(blank=True)
+    contract_number = models.CharField(max_length=64, blank=True)
+    contract_signed_date = models.DateField(null=True, blank=True)
+    contract_start_date = models.DateField(null=True, blank=True)
+    contract_end_date = models.DateField(null=True, blank=True)
+    internal_notes = models.TextField(blank=True)
     agency_status = models.CharField(max_length=16, blank=True)
 
     class Meta:
@@ -158,7 +185,11 @@ class JournalEntry(models.Model):
 
 
 class OperationalInvoice(models.Model):
-    """E-fatura / finans modülü (DBML: invoices — Django Invoice reserved değil ama çakışmayı önlemek için prefix)."""
+    """E-fatura / finans modülü (DBML: invoices — Django Invoice reserved değil ama çakışmayı önlemek için prefix).
+
+    notes alanı kalem detayları, indirim, tevkifat, banka bilgileri, açıklama gibi
+    zengin meta veriyi JSON olarak tutar (ön muhasebe arayüzü için).
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="operational_invoices")
@@ -166,10 +197,20 @@ class OperationalInvoice(models.Model):
     invoice_type = models.CharField(max_length=32, choices=InvoiceType.choices)
     category = models.CharField(max_length=64, blank=True)
     customer_name = models.CharField(max_length=255)
+    customer_address = models.CharField(max_length=512, blank=True, default="")
+    customer_email = models.CharField(max_length=255, blank=True, default="")
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     invoice_date = models.DateField()
+    due_date = models.DateField(null=True, blank=True)
     payment_status = models.CharField(max_length=16, choices=InvoicePaymentStatus.choices)
+    paid_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    paid_at = models.DateField(null=True, blank=True)
     tax_id = models.CharField(max_length=32, blank=True)
+    currency = models.CharField(max_length=8, default="TRY")
+    notes = models.TextField(blank=True, default="")
+    is_cancelled = models.BooleanField(default=False)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancel_reason = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         db_table = "hotelcrm_operationalinvoice"
@@ -178,13 +219,31 @@ class OperationalInvoice(models.Model):
 class CommercialContract(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="commercial_contracts")
+    travel_agency = models.ForeignKey(
+        TravelAgency,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commercial_contracts",
+    )
     display_code = models.CharField(max_length=32, unique=True, null=True, blank=True)
     title = models.CharField(max_length=255)
     partner_name = models.CharField(max_length=255)
+    partner_tax_id = models.CharField(max_length=32, blank=True)
+    partner_contact_name = models.CharField(max_length=255, blank=True)
+    partner_phone = models.CharField(max_length=64, blank=True)
+    partner_email = models.EmailField(blank=True)
+    partner_address = models.TextField(blank=True)
     contract_kind = models.CharField(max_length=32, blank=True)
     start_date = models.DateField()
     end_date = models.DateField()
     pricing_terms = models.CharField(max_length=255, blank=True)
+    commercial_terms_detail = models.TextField(blank=True)
+    signing_authority = models.CharField(max_length=255, blank=True)
+    governing_law = models.CharField(max_length=128, blank=True)
+    auto_renewal = models.BooleanField(default=False)
+    renewal_notice_days = models.PositiveIntegerField(null=True, blank=True)
+    penalty_notes = models.TextField(blank=True)
     status = models.CharField(max_length=32, choices=CommercialContractStatus.choices)
     notes = models.TextField(blank=True)
 
@@ -399,6 +458,23 @@ class PurchaseOrder(models.Model):
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     order_date = models.DateField()
     status = models.CharField(max_length=32, choices=PurchaseOrderStatus.choices)
+    supplier_tax_id = models.CharField(
+        max_length=11,
+        blank=True,
+        default="",
+        help_text="Satıcı VKN (10 hane) veya TCKN (11 hane)",
+    )
+    supplier_tax_office = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="Vergi dairesi (kurumsal satıcı için)",
+    )
+    operational_invoice_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="Oluşturulan alım faturası (operationalinvoice) kaydı",
+    )
 
     class Meta:
         db_table = "hotelcrm_purchaseorder"
@@ -433,3 +509,100 @@ class ChannelManagerSettings(models.Model):
 
     class Meta:
         db_table = "hotelcrm_channelmanagersettings"
+
+
+class FixedAsset(models.Model):
+    """Sabit kıymet kartı (demirbaş, taşıt, bina vs.) + amortisman takibi."""
+
+    CATEGORY_CHOICES = [
+        ("building", "Bina"),
+        ("land", "Arazi / Arsa"),
+        ("machine", "Tesis / Makine / Cihaz"),
+        ("vehicle", "Taşıt"),
+        ("fixture", "Demirbaş — Mobilya"),
+        ("it", "Bilgisayar / IT Donanım"),
+        ("kitchen", "Mutfak / F&B Demirbaşı"),
+        ("appliance", "Beyaz Eşya / Klima"),
+        ("intangible", "Maddi Olmayan (Yazılım/Lisans)"),
+        ("other", "Diğer Maddi Duran Varlık"),
+    ]
+
+    METHOD_CHOICES = [
+        ("straight", "Normal (Eşit)"),
+        ("declining_balance", "Azalan Bakiyeler"),
+    ]
+
+    STATUS_CHOICES = [
+        ("active", "Aktif"),
+        ("sold", "Satıldı"),
+        ("disposed", "Hurdaya Ayrıldı"),
+        ("idle", "Atıl"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="fixed_assets")
+    code = models.CharField(max_length=32)
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, default="fixture")
+    purchase_date = models.DateField()
+    cost = models.DecimalField(max_digits=14, decimal_places=2)
+    salvage_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    useful_life_years = models.PositiveSmallIntegerField(default=5)
+    method = models.CharField(max_length=24, choices=METHOD_CHOICES, default="straight")
+    annual_rate = models.DecimalField(max_digits=5, decimal_places=2, default=20)
+    accumulated_depreciation = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    last_depreciation_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="active")
+    gl_account_code = models.CharField(max_length=32, default="255")
+    gl_depreciation_account = models.CharField(max_length=32, default="257")
+    supplier_name = models.CharField(max_length=255, blank=True, default="")
+    serial_no = models.CharField(max_length=128, blank=True, default="")
+    location = models.CharField(max_length=255, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "hotelcrm_fixedasset"
+        unique_together = [("hotel", "code")]
+
+
+class BusinessPartner(models.Model):
+    """Cari kart — müşteri, tedarikçi, personel, ortak vb."""
+
+    PARTNER_TYPE_CHOICES = [
+        ("customer", "Müşteri"),
+        ("supplier", "Tedarikçi"),
+        ("both", "Müşteri & Tedarikçi"),
+        ("staff", "Personel"),
+        ("partner", "Ortak"),
+        ("other", "Diğer"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="business_partners")
+    code = models.CharField(max_length=32)
+    title = models.CharField(max_length=255)
+    partner_type = models.CharField(max_length=16, choices=PARTNER_TYPE_CHOICES, default="customer")
+    tax_id = models.CharField(max_length=32, blank=True, default="")
+    tax_office = models.CharField(max_length=128, blank=True, default="")
+    address = models.CharField(max_length=512, blank=True, default="")
+    city = models.CharField(max_length=64, blank=True, default="")
+    country = models.CharField(max_length=64, blank=True, default="Türkiye")
+    contact_name = models.CharField(max_length=128, blank=True, default="")
+    phone = models.CharField(max_length=32, blank=True, default="")
+    email = models.CharField(max_length=128, blank=True, default="")
+    opening_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    credit_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    payment_term_days = models.PositiveSmallIntegerField(default=30)
+    iban = models.CharField(max_length=64, blank=True, default="")
+    bank_name = models.CharField(max_length=128, blank=True, default="")
+    gl_account_code = models.CharField(max_length=32, default="120")
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hotelcrm_businesspartner"
+        unique_together = [("hotel", "code")]
+        ordering = ["title"]

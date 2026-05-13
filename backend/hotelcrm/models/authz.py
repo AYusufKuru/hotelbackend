@@ -1,5 +1,3 @@
-import uuid
-
 from django.conf import settings
 from django.db import models
 
@@ -23,12 +21,24 @@ class Permission(models.Model):
 
 
 class UserRole(models.Model):
+    """Django kullanıcısının seçili oteldeki tek rol ataması (kullanıcı + otel benzersiz)."""
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="hotelcrm_roles")
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="user_links")
+    hotel = models.ForeignKey(
+        "hotelcrm.Hotel",
+        on_delete=models.CASCADE,
+        related_name="user_roles",
+    )
 
     class Meta:
         db_table = "hotelcrm_userrole"
-        unique_together = [("user", "role")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "hotel"],
+                name="hotelcrm_userrole_user_hotel_uniq",
+            ),
+        ]
 
 
 class RolePermission(models.Model):
@@ -38,6 +48,22 @@ class RolePermission(models.Model):
     class Meta:
         db_table = "hotelcrm_rolepermission"
         unique_together = [("role", "permission")]
+
+
+class HotelModuleOverride(models.Model):
+    """Otel bazında modülü kapatma (is_enabled=False). Kayıt yok = varsayılan açık."""
+
+    hotel = models.ForeignKey(
+        "hotelcrm.Hotel",
+        on_delete=models.CASCADE,
+        related_name="module_overrides",
+    )
+    module_id = models.CharField(max_length=64)
+    is_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "hotelcrm_hotelmoduleoverride"
+        unique_together = [("hotel", "module_id")]
 
 
 class AuditLog(models.Model):

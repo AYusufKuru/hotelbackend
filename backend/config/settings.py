@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from datetime import timedelta
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,7 +21,6 @@ try:
     from dotenv import load_dotenv
 
     load_dotenv(BASE_DIR / ".env")
-    load_dotenv(BASE_DIR / ".env.local", override=True)
 except ImportError:
     pass
 
@@ -35,22 +33,13 @@ SECRET_KEY = os.environ.get(
     "django-insecure-dev-only-change-in-production",
 )
 
-# Vercel runtime sets VERCEL=1; local dev should stay DEBUG=True by default
-_is_vercel = bool(os.environ.get("VERCEL", "").strip())
-if _is_vercel:
-    DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
-else:
-    DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
 _allowed = os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip()
 if _allowed:
     ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
-
-# Vercel preview + production: *.vercel.app (Django: leading dot = subdomains of this host)
-if _is_vercel and ".vercel.app" not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(".vercel.app")
 
 
 # Application definition
@@ -104,96 +93,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-# Otomatik env’ler: çoğunlukla DATABASE_URL; Vercel integration “STORAGE” öneki → STORAGE_URL
-# (Django/ dj-database-url sadece tek isim bilmek zorunda değil, hepsini dene)
-def _database_url_from_env() -> str:
-    for _key in (
-        "DATABASE_URL",
-        "STORAGE_URL",
-        "POSTGRES_URL",
-    ):
-        v = (os.environ.get(_key) or "").strip()
-        if v and v not in ("null", "undefined", "None"):
-            return v
-    return ""
-
-
-def _normalize_postgres_dsn(dsn: str) -> str:
-    """
-    Neon vb. sorgu parametrelerinden channel_binding, bazı psycopg2/libpq
-    sürümlerinde hata/uyumsuzluk verir; gerekirse sadece sslmode kalsın.
-    """
-    dsn = dsn.strip()
-    if dsn.startswith("postgres://"):
-        dsn = "postgresql://" + dsn[len("postgres://") :]
-    p = urlsplit(dsn)
-    if not p.query or "channel_binding" not in p.query.lower():
-        return dsn
-    pairs = [
-        (k, v)
-        for k, v in parse_qsl(p.query, keep_blank_values=True)
-        if k.lower() != "channel_binding"
-    ]
-    new_q = urlencode(pairs)
-    return urlunsplit((p.scheme, p.netloc, p.path, new_q, p.fragment))
-
-
-_dsn = _database_url_from_env()
-if _dsn:
-    _dsn = _normalize_postgres_dsn(_dsn)
-if not _dsn or _dsn in ("null", "undefined", "None"):
-    _local_sqlite = str(BASE_DIR / "db.sqlite3")
-    if _is_vercel:
-        _vercel_tmp = (os.environ.get("VERCEL_SQLITE_PATH", "/tmp") or "/tmp").rstrip(
-            os.sep
-        ) + f"{os.sep}hotelcrm.sqlite3"
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": _vercel_tmp,
-            }
-        }
-    else:
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": _local_sqlite,
-            }
-        }
-else:
-    import dj_database_url
-
-    try:
-        _parsed = dj_database_url.parse(
-            _dsn,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-        # Parse sonrası da libpq'ye giden sözlükten çıkar
-        if isinstance(_parsed, dict) and "OPTIONS" in _parsed and isinstance(
-            _parsed.get("OPTIONS"), dict
-        ):
-            _parsed["OPTIONS"].pop("channel_binding", None)
-        DATABASES = {"default": _parsed}
-    except Exception as e:
-        # DSN hatalıysa uygulama açılmasın diye açık hata; yedek: /tmp sqlite
-        if _is_vercel:
-            _vercel_tmp = (os.environ.get("VERCEL_SQLITE_PATH", "/tmp") or "/tmp").rstrip(
-                os.sep
-            ) + f"{os.sep}hotelcrm.sqlite3"
-            DATABASES = {
-                "default": {
-                    "ENGINE": "django.db.backends.sqlite3",
-                    "NAME": _vercel_tmp,
-                }
-            }
-        else:
-            raise RuntimeError("DATABASE_URL okunamadı") from e
-
-# Sunucusuzda genelde `migrate` yok; DB oturumu tablo ister, her istek 500 edebilir.
-# JWT ana API, oturum çoğu istekte DB şart bırakmasın diye Vercel’de imzalı çerez.
-if _is_vercel:
-    SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 
 
 # Password validation
@@ -230,31 +135,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = "static/"
-# Vercel build: collectstatic için gerekli (Vercel CDN)
-STATIC_ROOT = BASE_DIR / "staticfiles"
-
-# Vercel / ters vekil: HTTPS ve doğru host
-if _is_vercel:
-    USE_X_FORWARDED_HOST = True
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-_csrf_extra = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
-CSRF_TRUSTED_ORIGINS = [u.strip() for u in _csrf_extra.split(",") if u.strip()]
-if _is_vercel:
-    _vurl = os.environ.get("VERCEL_URL", "").strip()
-    if _vurl:
-        if not _vurl.lower().startswith("http"):
-            _vurl = f"https://{_vurl.rstrip('/')}"
-        if _vurl not in CSRF_TRUSTED_ORIGINS:
-            CSRF_TRUSTED_ORIGINS.append(_vurl)
-
-if _is_vercel and not DEBUG:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    # Vercel kenarı zaten HTTPS; bu redirect bazı proxy senaryolarında 500/loop tetikleyebiliyor
-    if os.environ.get("DJANGO_FORCE_SSL", "0") == "1":
-        SECURE_SSL_REDIRECT = True
+STATIC_URL = 'static/'
 
 # --- CORS ---
 # Paketlenmiş Electron (başka PC) genelde Origin null/file → LAN testi için .env: DJANGO_CORS_ALLOW_ALL=1
@@ -305,28 +186,6 @@ LICENSE_SERVER_URL = os.environ.get("LICENSE_SERVER_URL", "").strip().rstrip("/"
 LICENSE_KEY = os.environ.get("LICENSE_KEY", "").strip()
 _LICENSE_ENFORCE_RAW = os.environ.get("LICENSE_ENFORCE", "0").strip().lower()
 LICENSE_ENFORCE = _LICENSE_ENFORCE_RAW in ("1", "true", "yes", "on")
-
-
-def _env_int(name: str, default: int) -> int:
-    # Vercel’de değişken var ama değer boş string → int() patlamasın
-    raw = (os.environ.get(name) or "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw, 10)
-    except ValueError:
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = (os.environ.get(name) or "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
-
-
-LICENSE_CHECK_CACHE_SECONDS = _env_int("LICENSE_CHECK_CACHE_SECONDS", 120)
-LICENSE_CHECK_TIMEOUT = _env_float("LICENSE_CHECK_TIMEOUT", 8.0)
+# Panelden askıya alma vb. değişikliklerin otel API’sine yansıması için çok uzun tutmayın (örn. 120 yerine 25–60).
+LICENSE_CHECK_CACHE_SECONDS = int(os.environ.get("LICENSE_CHECK_CACHE_SECONDS", "30"))
+LICENSE_CHECK_TIMEOUT = float(os.environ.get("LICENSE_CHECK_TIMEOUT", "8"))
