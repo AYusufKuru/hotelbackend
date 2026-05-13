@@ -14,6 +14,9 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -40,6 +43,13 @@ if _allowed:
     ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+for _vercel_host in (
+    (os.environ.get("VERCEL_URL") or "").strip(),
+    (os.environ.get("VERCEL_BRANCH_URL") or "").strip(),
+):
+    if _vercel_host and _vercel_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_vercel_host)
 
 
 # Application definition
@@ -92,13 +102,35 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+#
+# Vercel (serverless): uygulama dizini salt okunur → SQLite ile giriş/oturum yazılamaz
+# ("attempt to write a readonly database"). Üretimde PostgreSQL kullanın.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+_database_url = (os.environ.get("DATABASE_URL") or "").strip()
+_on_vercel = (os.environ.get("VERCEL") or "").strip() == "1"
+
+if _on_vercel and not _database_url:
+    raise ImproperlyConfigured(
+        "Vercel'de DATABASE_URL zorunlu (PostgreSQL). SQLite bu ortamda yazılamaz; "
+        "ücretsiz seçenekler: Neon.tech veya Supabase. Bağlantıyı Vercel ortam "
+        "değişkeni olarak ekleyin ve Build + Production'da tanımlı olsun."
+    )
+
+if _database_url:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            _database_url,
+            conn_max_age=0,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation
