@@ -14,9 +14,6 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-import dj_database_url
-from django.core.exceptions import ImproperlyConfigured
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -43,15 +40,6 @@ if _allowed:
     ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
-
-# Vercel her deploy’da VERCEL_URL ile kendi .vercel.app ana bilgisayar adını verir (protokol yok).
-# DJANGO_ALLOWED_HOSTS atlanınca admin/API bu host’tan yine de açılır.
-for _vercel_host in (
-    (os.environ.get("VERCEL_URL") or "").strip(),
-    (os.environ.get("VERCEL_BRANCH_URL") or "").strip(),
-):
-    if _vercel_host and _vercel_host not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append(_vercel_host)
 
 
 # Application definition
@@ -104,35 +92,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-#
-# Vercel serverless: dosya sistemi çalışma anında salt okunur → SQLite burada yazılamaz
-# (admin girişi, oturum vb. "attempt to write a readonly database" verir).
-# Üretimde PostgreSQL bağlantı dizesi şart: Neon, Supabase, Vercel Postgres vb.
 
-_database_url = (os.environ.get("DATABASE_URL") or "").strip()
-_is_vercel = (os.environ.get("VERCEL") or "").strip() == "1"
-
-if _is_vercel and not _database_url:
-    raise ImproperlyConfigured(
-        "Vercel ortamında DATABASE_URL tanımlı olmalı (PostgreSQL). "
-        "SQLite bu platformda kalıcı yazıya izin vermez; ücretsiz veritabanı: Neon veya Supabase."
-    )
-
-if _database_url:
-    DATABASES = {
-        "default": dj_database_url.parse(
-            _database_url,
-            conn_max_age=0,
-            conn_health_checks=True,
-        )
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
+}
 
 
 # Password validation
@@ -170,8 +136,6 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-# Üretim derlemesi (ör. Vercel `collectstatic`) için zorunlu; yerel geliştirmede klasörü isteğe bağlı kullanılır.
-STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # --- CORS ---
 # Paketlenmiş Electron (başka PC) genelde Origin null/file → LAN testi için .env: DJANGO_CORS_ALLOW_ALL=1
