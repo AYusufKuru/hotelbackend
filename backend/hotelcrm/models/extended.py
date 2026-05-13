@@ -173,7 +173,7 @@ class GLAccount(models.Model):
 class JournalEntry(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="journal_entries")
-    display_code = models.CharField(max_length=32, unique=True, null=True, blank=True)
+    display_code = models.CharField(max_length=32, null=True, blank=True, db_index=True)
     entry_date = models.DateField()
     description = models.CharField(max_length=512)
     debit_amount = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)

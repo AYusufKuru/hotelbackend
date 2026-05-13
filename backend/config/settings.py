@@ -14,7 +14,6 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -117,6 +116,8 @@ if _on_vercel and not _database_url:
     )
 
 if _database_url:
+    import dj_database_url
+
     DATABASES = {
         "default": dj_database_url.parse(
             _database_url,
