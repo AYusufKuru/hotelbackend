@@ -5,6 +5,8 @@ oda-gecesi bazında folio + ödeme + kasa geliri; ayrıca yıl boyunca gider har
 Kullanım:
   py manage.py seed_pms_test_data --hotel=DEMO
   py manage.py seed_pms_test_data --hotel=DEMO --wipe
+  py manage.py seed_pms_test_data --hotel=DEMO --wipe --compact
+    (Vercel/CI: az oda ve rezervasyon; build icin hizli)
 
 İşaretler: room_type SEED_*; guest *@seed.hotelcrm.test (TR: demo TCKN; diğer uyruklar: demo pasaport);
 reservation notes [seed-pms-test]; kasa satırları description içinde [seed-cash].
@@ -203,9 +205,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--hotel", default="DEMO", help="Otel code")
         parser.add_argument(
-            "--wipe",
+            "--compact",
             action="store_true",
-            help="Önceki tohum kayıtlarını sil",
+            help="Vercel/CI icin kucuk veri seti (az oda, misafir, rezervasyon).",
         )
 
     def handle(self, *args, **options):
@@ -221,11 +223,15 @@ class Command(BaseCommand):
         rnd = random.Random(20260211)
         today = timezone.localdate() if timezone.is_aware(timezone.now()) else date.today()
 
+        compact = bool(options["compact"])
+        per_type = 2 if compact else 20
+        guest_n = 36 if compact else 240
+
         with transaction.atomic():
             room_types = self._seed_room_types(hotel)
-            rooms = self._seed_rooms(hotel, room_types, rnd, per_type=20)
+            rooms = self._seed_rooms(hotel, room_types, rnd, per_type=per_type)
             channels = self._ensure_channels(hotel)
-            guests = self._seed_guests(hotel, rnd, count=240)
+            guests = self._seed_guests(hotel, rnd, count=guest_n)
             occ = RoomOccupancyTracker(rooms)
             n_res, n_pay, n_cash_in, n_cash_ex = self._seed_year_scenario(
                 hotel=hotel,
@@ -236,6 +242,7 @@ class Command(BaseCommand):
                 occ=occ,
                 today=today,
                 rnd=rnd,
+                compact=compact,
             )
             self._sync_guest_totals(hotel, guests)
             self._sync_room_occupancy_from_active_stays(hotel)
@@ -459,15 +466,36 @@ class Command(BaseCommand):
         occ: RoomOccupancyTracker,
         today: date,
         rnd: random.Random,
+        *,
+        compact: bool = False,
     ) -> tuple[int, int, int, int]:
         created_res = 0
-        year_ago = today - timedelta(days=365)
+        if compact:
+            year_ago = today - timedelta(days=90)
+            n_completed = 42
+            n_cancel = 6
+            n_inhouse = 5
+            future_spans: tuple[tuple[int, int, int], ...] = (
+                (1, 40, 14),
+                (41, 85, 10),
+            )
+            expense_day_prob = 0.22
+        else:
+            year_ago = today - timedelta(days=365)
+            n_completed = 920
+            n_cancel = 95
+            n_inhouse = 26
+            future_spans = (
+                (1, 120, 260),
+                (121, 400, 200),
+            )
+            expense_day_prob = 0.42
 
-        # --- Tamamlanmış konaklamalar (~1 yıllık pencere, yüksek hacim) ---
-        n_completed = 920
+        # --- Tamamlanmis konaklamalar (genis veya dar tarih penceresi) ---
+        window_days = (today - year_ago).days
         for _ in range(n_completed):
             nights = rnd.randint(1, 12)
-            check_out = year_ago + timedelta(days=rnd.randint(nights + 1, 365))
+            check_out = year_ago + timedelta(days=rnd.randint(nights + 1, max(window_days, nights + 2)))
             if check_out >= today:
                 check_out = today - timedelta(days=rnd.randint(1, 5))
             check_in = check_out - timedelta(days=nights)
@@ -531,9 +559,10 @@ class Command(BaseCommand):
             created_res += 1
 
         # --- İptaller ---
-        for _ in range(95):
+        cancel_window = min(300, max(30, window_days - 10))
+        for _ in range(n_cancel):
             nights = rnd.randint(2, 8)
-            check_in = year_ago + timedelta(days=rnd.randint(10, 300))
+            check_in = year_ago + timedelta(days=rnd.randint(10, cancel_window))
             check_out = check_in + timedelta(days=nights)
             rt = rnd.choice(room_types)
             g = rnd.choice(guests)
@@ -561,7 +590,7 @@ class Command(BaseCommand):
             created_res += 1
 
         # --- İçeride ---
-        for _ in range(26):
+        for _ in range(n_inhouse):
             nights = rnd.randint(4, 16)
             check_in = today - timedelta(days=rnd.randint(0, 6))
             check_out = check_in + timedelta(days=nights)
@@ -626,10 +655,7 @@ class Command(BaseCommand):
             created_res += 1
 
         # --- Gelecek (yakın + uzun) ---
-        for span_start, span_end, count in (
-            (1, 120, 260),
-            (121, 400, 200),
-        ):
+        for span_start, span_end, count in future_spans:
             for _ in range(count):
                 nights = rnd.randint(1, 14)
                 check_in = today + timedelta(days=rnd.randint(span_start, span_end))
@@ -691,7 +717,9 @@ class Command(BaseCommand):
                 )
                 created_res += 1
 
-        n_cash_ex = self._seed_operating_expenses(hotel, year_ago, today, rnd)
+        n_cash_ex = self._seed_operating_expenses(
+            hotel, year_ago, today, rnd, day_prob=expense_day_prob
+        )
         n_pay = Payment.objects.filter(
             reservation__hotel=hotel, reservation__notes__contains=SEED_NOTE
         ).count()
@@ -822,8 +850,11 @@ class Command(BaseCommand):
         year_start: date,
         today: date,
         rnd: random.Random,
+        *,
+        day_prob: float = 0.42,
     ) -> int:
         """Yıl boyunca gerçekçi gider kalemleri (kasa çıkışı)."""
+        day_prob = max(0.0, min(1.0, float(day_prob)))
         templates = [
             ("Elektrik / su tüketimi", 8000, 28000),
             ("Temizlik malzemeleri", 1200, 6500),
@@ -839,7 +870,7 @@ class Command(BaseCommand):
         n = 0
         d = year_start
         while d <= today:
-            if rnd.random() < 0.42:
+            if rnd.random() < day_prob:
                 label, lo, hi = rnd.choice(templates)
                 amt = d0(Decimal(str(rnd.randint(lo, hi))))
                 CashTransaction.objects.create(

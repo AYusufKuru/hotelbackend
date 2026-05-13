@@ -6,7 +6,10 @@ ard arda build alinsa bile cift kayit birikmez.
 
 Ortam: SEED_DEMO_ON_DEPLOY=1 (veya true/yes/on). Acik degilse komut hicbir sey yapmaz (cikis 0).
 
-Sira: seed_demo_hotel -> seed_pms_test_data --wipe -> seed_accounting_test_data --wipe
+PMS: varsayilan olarak seed_pms_test_data --compact (Vercel build suresi kisa).
+Tam agir yuk: SEED_DEMO_FULL=1 (dakikalar surebilir; zaman asimi riski).
+
+Sira: seed_demo_hotel -> seed_pms_test_data --wipe [--compact] -> seed_accounting_test_data --wipe
 """
 
 from __future__ import annotations
@@ -35,11 +38,22 @@ class Command(BaseCommand):
             return
 
         hotel = "DEMO"
+        pms_compact = not _truthy("SEED_DEMO_FULL")
+        if pms_compact:
+            self.stdout.write(
+                "seed_vercel_demo: using compact PMS seed (fast build). "
+                "Set SEED_DEMO_FULL=1 for full dataset (slow; may timeout on Vercel)."
+            )
+        else:
+            self.stdout.write(
+                "seed_vercel_demo: full PMS seed (SEED_DEMO_FULL=1) — this may take several minutes."
+            )
+
         self.stdout.write("seed_vercel_demo: ensuring DEMO hotel...")
         call_command("seed_demo_hotel")
 
         self.stdout.write("seed_vercel_demo: PMS seed (wipe then load)...")
-        call_command("seed_pms_test_data", hotel=hotel, wipe=True)
+        call_command("seed_pms_test_data", hotel=hotel, wipe=True, compact=pms_compact)
 
         self.stdout.write("seed_vercel_demo: accounting seed (wipe then load)...")
         call_command("seed_accounting_test_data", hotel=hotel, wipe=True)
