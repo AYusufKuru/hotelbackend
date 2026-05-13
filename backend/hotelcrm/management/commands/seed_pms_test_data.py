@@ -205,6 +205,11 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--hotel", default="DEMO", help="Otel code")
         parser.add_argument(
+            "--wipe",
+            action="store_true",
+            help="Önce [seed-pms-test] ile işaretli rezervasyon / seed oda ve misafirleri siler.",
+        )
+        parser.add_argument(
             "--compact",
             action="store_true",
             help="Vercel/CI icin kucuk veri seti (az oda, misafir, rezervasyon).",
