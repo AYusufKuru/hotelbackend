@@ -41,6 +41,15 @@ if _allowed:
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
+# Vercel her deploy’da VERCEL_URL ile kendi .vercel.app ana bilgisayar adını verir (protokol yok).
+# DJANGO_ALLOWED_HOSTS atlanınca admin/API bu host’tan yine de açılır.
+for _vercel_host in (
+    (os.environ.get("VERCEL_URL") or "").strip(),
+    (os.environ.get("VERCEL_BRANCH_URL") or "").strip(),
+):
+    if _vercel_host and _vercel_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_vercel_host)
+
 
 # Application definition
 
