@@ -44,7 +44,7 @@ class Command(BaseCommand):
             )
             return
 
-        hotel = "DEMO"
+        hotels = ("DEMO", "DEMO2")
         pms_compact = not _truthy("SEED_DEMO_FULL")
         if pms_compact:
             self.stdout.write(
@@ -57,20 +57,18 @@ class Command(BaseCommand):
             )
 
         try:
-            self.stdout.write("seed_vercel_demo: ensuring DEMO hotel...")
+            self.stdout.write("seed_vercel_demo: ensuring demo hotels...")
             call_command("seed_demo_hotel")
 
-            self.stdout.write("seed_vercel_demo: PMS seed (wipe then load)...")
-            call_command("seed_pms_test_data", hotel=hotel, wipe=True, compact=pms_compact)
-
-            self.stdout.write("seed_vercel_demo: accounting seed (wipe then load)...")
-            call_command("seed_accounting_test_data", hotel=hotel, wipe=True)
-
-            self.stdout.write("seed_vercel_demo: stock seed (wipe then load)...")
-            call_command("seed_stock_demo", hotel=hotel, wipe=True)
-
-            self.stdout.write("seed_vercel_demo: ops/modül seed (wipe then load)...")
-            call_command("seed_ops_demo", hotel=hotel, wipe=True)
+            for hotel in hotels:
+                self.stdout.write(f"seed_vercel_demo: PMS seed {hotel}...")
+                call_command("seed_pms_test_data", hotel=hotel, wipe=True, compact=pms_compact)
+                self.stdout.write(f"seed_vercel_demo: accounting seed {hotel}...")
+                call_command("seed_accounting_test_data", hotel=hotel, wipe=True)
+                self.stdout.write(f"seed_vercel_demo: stock seed {hotel}...")
+                call_command("seed_stock_demo", hotel=hotel, wipe=True)
+                self.stdout.write(f"seed_vercel_demo: ops seed {hotel}...")
+                call_command("seed_ops_demo", hotel=hotel, wipe=True)
         except Exception as exc:
             self.stderr.write(self.style.ERROR(f"seed_vercel_demo başarısız (yayın devam eder): {exc}"))
             return

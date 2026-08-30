@@ -25,7 +25,8 @@ from hotelcrm.models import Department, Hotel, HotelRecruitment, StaffAbsenceRep
 from hotelcrm.models.enums import StaffAbsenceReason, StaffStatus
 
 SEED_TAG = "hr_demo"
-DISPLAY_PREFIX = "HR-DEMO-"
+def _staff_prefix(hotel_code: str) -> str:
+    return f"HR-{(hotel_code or 'DEMO').upper()}-"
 
 DEPARTMENTS: tuple[str, ...] = (
     "Resepsiyon",
@@ -528,7 +529,7 @@ class Command(BaseCommand):
                 hire_date = today - timedelta(days=rnd.randint(120, 2200))
                 monthly = Decimal(str(rnd.randint(24000, 78000)))
                 idx = i + 1
-                display_code = f"{DISPLAY_PREFIX}{idx:03d}"
+                display_code = f"{_staff_prefix(code)}{idx:03d}"
                 first = rnd.choice(FIRST_NAMES)
                 last = rnd.choice(LAST_NAMES)
                 full_name = f"{first} {last}"
@@ -599,7 +600,7 @@ class Command(BaseCommand):
         id_set: set = set(
             StaffMember.objects.filter(
                 hotel=hotel,
-                display_code__startswith=DISPLAY_PREFIX,
+                display_code__startswith=_staff_prefix(hotel.code),
             ).values_list("pk", flat=True),
         )
         # SQLite JSON contains desteklemez; seed_tag el ile taranır.

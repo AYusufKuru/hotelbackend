@@ -88,15 +88,18 @@ from hotelcrm.models.enums import (
 from hotelcrm.models.minibar_laundry_inv import InventoryUsageArea
 
 SEED_TAG = "[seed-ops]"
-PREFIX = "OPS"
 
 
 def d2(v) -> Decimal:
     return Decimal(str(v)).quantize(Decimal("0.01"))
 
 
-def code(kind: str, n: int) -> str:
-    return f"{PREFIX}-{kind}-{n:03d}"
+def ops_prefix(hotel: Hotel) -> str:
+    return (hotel.code or "DEMO").upper()[:8]
+
+
+def code(hotel: Hotel, kind: str, n: int) -> str:
+    return f"{ops_prefix(hotel)}-{kind}-{n:03d}"
 
 
 class Command(BaseCommand):
@@ -136,7 +139,12 @@ class Command(BaseCommand):
                 hotel=hotel, status=ReservationStatus.CHECKED_OUT
             ).select_related("guest", "room")[:30]
         )
-        staff = list(StaffMember.objects.filter(hotel=hotel, display_code__startswith="HR-DEMO-"))
+        staff = list(
+            StaffMember.objects.filter(
+                hotel=hotel,
+                display_code__startswith=f"HR-{(hotel.code or 'DEMO').upper()}-",
+            )
+        )
         inventory = list(InventoryItem.objects.filter(hotel=hotel, is_archived=False))
 
         if not rooms or not guests:
@@ -166,47 +174,50 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Operasyon demo verisi yüklendi: {hotel.code}"))
 
     def _wipe(self, hotel: Hotel) -> None:
+        p = ops_prefix(hotel)
         FolioLine.objects.filter(
             folio__reservation__hotel=hotel, description__contains=SEED_TAG
         ).delete()
-        RestaurantOrder.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-RO-").delete()
-        MenuItem.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-MN-").delete()
+        RestaurantOrder.objects.filter(hotel=hotel, display_code__startswith=f"{p}-RO-").delete()
+        MenuItem.objects.filter(hotel=hotel, display_code__startswith=f"{p}-MN-").delete()
         MenuCategory.objects.filter(hotel=hotel, name__startswith="Demo ").delete()
-        SpaAppointment.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-SA-").delete()
+        SpaAppointment.objects.filter(hotel=hotel, display_code__startswith=f"{p}-SA-").delete()
         SpaService.objects.filter(hotel=hotel, name__startswith="Demo ").delete()
-        MinibarCharge.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-MB-").delete()
-        MinibarProduct.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-MP-").delete()
-        LaundryOrder.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-LD-").delete()
+        MinibarCharge.objects.filter(hotel=hotel, display_code__startswith=f"{p}-MB-").delete()
+        MinibarProduct.objects.filter(hotel=hotel, display_code__startswith=f"{p}-MP-").delete()
+        LaundryOrder.objects.filter(hotel=hotel, display_code__startswith=f"{p}-LD-").delete()
         LaundryPricelistItem.objects.filter(hotel=hotel, name__startswith="Demo ").delete()
-        GroupBooking.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-GR-").delete()
-        BanquetEvent.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-BQ-").delete()
-        LostFoundItem.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-LF-").delete()
-        AgencyContractRate.objects.filter(agency__hotel=hotel, agency__display_code__startswith=f"{PREFIX}-AG-").delete()
-        AgencyPromotion.objects.filter(agency__hotel=hotel, agency__display_code__startswith=f"{PREFIX}-AG-").delete()
-        CommercialContract.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-CC-").delete()
-        TravelAgency.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-AG-").delete()
-        SalesLead.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-SL-").delete()
-        MarketingCampaign.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-MC-").delete()
-        TourOffer.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-TO-").delete()
-        GuestTransfer.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-XF-").delete()
-        Recipe.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-RC-").delete()
-        FoodWasteLog.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-FW-").delete()
-        EntertainmentActivity.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-EA-").delete()
-        EntertainmentShow.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-ES-").delete()
-        KvkkConsent.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-KV-").delete()
+        GroupBooking.objects.filter(hotel=hotel, display_code__startswith=f"{p}-GR-").delete()
+        BanquetEvent.objects.filter(hotel=hotel, display_code__startswith=f"{p}-BQ-").delete()
+        LostFoundItem.objects.filter(hotel=hotel, display_code__startswith=f"{p}-LF-").delete()
+        AgencyContractRate.objects.filter(agency__hotel=hotel, agency__display_code__startswith=f"{p}-AG-").delete()
+        AgencyPromotion.objects.filter(agency__hotel=hotel, agency__display_code__startswith=f"{p}-AG-").delete()
+        CommercialContract.objects.filter(hotel=hotel, display_code__startswith=f"{p}-CC-").delete()
+        TravelAgency.objects.filter(hotel=hotel, display_code__startswith=f"{p}-AG-").delete()
+        SalesLead.objects.filter(hotel=hotel, display_code__startswith=f"{p}-SL-").delete()
+        MarketingCampaign.objects.filter(hotel=hotel, display_code__startswith=f"{p}-MC-").delete()
+        TourOffer.objects.filter(hotel=hotel, display_code__startswith=f"{p}-TO-").delete()
+        GuestTransfer.objects.filter(hotel=hotel, display_code__startswith=f"{p}-XF-").delete()
+        Recipe.objects.filter(hotel=hotel, display_code__startswith=f"{p}-RC-").delete()
+        FoodWasteLog.objects.filter(hotel=hotel, display_code__startswith=f"{p}-FW-").delete()
+        EntertainmentActivity.objects.filter(hotel=hotel, display_code__startswith=f"{p}-EA-").delete()
+        EntertainmentShow.objects.filter(hotel=hotel, display_code__startswith=f"{p}-ES-").delete()
+        KvkkConsent.objects.filter(hotel=hotel, display_code__startswith=f"{p}-KV-").delete()
         SurveyInvitation.objects.filter(hotel=hotel, sms_message__contains=SEED_TAG).delete()
         GuestFeedbackEntry.objects.filter(hotel=hotel, comment__contains=SEED_TAG).delete()
         KbsGuestSubmission.objects.filter(hotel=hotel).delete()
-        OperationalTask.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-TK-").delete()
+        OperationalTask.objects.filter(hotel=hotel, display_code__startswith=f"{ops_prefix(hotel)}-TK-").delete()
         Notification.objects.filter(hotel=hotel, message__contains=SEED_TAG).delete()
-        CrsSyncLog.objects.filter(action__contains=SEED_TAG).delete()
+        CrsSyncLog.objects.filter(action__contains=SEED_TAG, to_label=hotel.code).delete()
+        CrsSyncLog.objects.filter(action__contains=SEED_TAG, from_label=hotel.code).delete()
         ItAlertLog.objects.filter(hotel=hotel, message__contains=SEED_TAG).delete()
         ItAlarmWebhook.objects.filter(hotel=hotel, name__startswith="Demo ").delete()
-        for integ in IntegrationConnection.objects.filter(hotel=hotel, display_code__startswith=f"{PREFIX}-IN-"):
+        for integ in IntegrationConnection.objects.filter(hotel=hotel, display_code__startswith=f"{ops_prefix(hotel)}-IN-"):
             ItMetricSample.objects.filter(integration=integ).delete()
             IntegrationEventLog.objects.filter(integration=integ).delete()
             integ.delete()
         CompetitorHotel.objects.filter(hotel=hotel, notes__contains=SEED_TAG).delete()
+        InventoryItem.objects.filter(hotel=hotel, sku__startswith=f"{p}-MB-").delete()
         InventoryItem.objects.filter(hotel=hotel, sku__startswith="OPS-MB-").delete()
         self.stdout.write("Operasyon tohum kayıtları silindi.")
 
@@ -284,7 +295,7 @@ class Command(BaseCommand):
         for i, (name, legal, comm, country, contact) in enumerate(specs, start=1):
             ag = TravelAgency.objects.create(
                 hotel=hotel,
-                display_code=code("AG", i),
+                display_code=code(hotel, "AG", i),
                 name=name,
                 legal_name=legal,
                 tax_office="Beşiktaş",
@@ -335,7 +346,7 @@ class Command(BaseCommand):
             CommercialContract.objects.create(
                 hotel=hotel,
                 travel_agency=ag,
-                display_code=code("CC", i),
+                display_code=code(hotel, "CC", i),
                 title=f"{name} 2026 allotment sözleşmesi",
                 partner_name=legal,
                 partner_tax_id=ag.tax_id,
@@ -363,7 +374,7 @@ class Command(BaseCommand):
         for i, (account, note, stage, value, prob) in enumerate(leads, start=1):
             SalesLead.objects.create(
                 hotel=hotel,
-                display_code=code("SL", i),
+                display_code=code(hotel, "SL", i),
                 account_name=account,
                 contact_name="Satış demo",
                 phone=f"0532 400 10{i:02d}",
@@ -383,7 +394,7 @@ class Command(BaseCommand):
         ):
             MarketingCampaign.objects.create(
                 hotel=hotel,
-                display_code=code("MC", i),
+                display_code=code(hotel, "MC", i),
                 title=title,
                 target_segment=seg,
                 accent_color="#1d4ed8",
@@ -421,7 +432,7 @@ class Command(BaseCommand):
                 MenuItem.objects.create(
                     hotel=hotel,
                     category=cats[ci],
-                    display_code=code("MN", i),
+                    display_code=code(hotel, "MN", i),
                     name=name,
                     unit_price=d2(price),
                 )
@@ -434,7 +445,7 @@ class Command(BaseCommand):
         for i, (name, cost, price, ing) in enumerate(recipes, start=1):
             Recipe.objects.create(
                 hotel=hotel,
-                display_code=code("RC", i),
+                display_code=code(hotel, "RC", i),
                 name=name,
                 cost_amount=d2(cost),
                 menu_price=d2(price),
@@ -450,7 +461,7 @@ class Command(BaseCommand):
         ):
             FoodWasteLog.objects.create(
                 hotel=hotel,
-                display_code=code("FW", i),
+                display_code=code(hotel, "FW", i),
                 item_description=desc,
                 reason=reason,
                 loss_amount=d2(loss),
@@ -472,7 +483,7 @@ class Command(BaseCommand):
                 lines.append((mi, qty, lt))
             order = RestaurantOrder.objects.create(
                 hotel=hotel,
-                display_code=code("RO", i + 1),
+                display_code=code(hotel, "RO", i + 1),
                 table_label="" if res else f"Masa {4 + i}",
                 room=room,
                 reservation=res,
@@ -536,7 +547,7 @@ class Command(BaseCommand):
             day = today if i >= 3 else today - timedelta(days=1)
             SpaAppointment.objects.create(
                 hotel=hotel,
-                display_code=code("SA", i + 1),
+                display_code=code(hotel, "SA", i + 1),
                 guest_name=res.primary_guest_name if res else "Walk-in SPA",
                 room=res.room if res else None,
                 reservation=res,
@@ -573,7 +584,7 @@ class Command(BaseCommand):
             products.append(
                 MinibarProduct.objects.create(
                     hotel=hotel,
-                    display_code=code("MP", i),
+                    display_code=code(hotel, "MP", i),
                     name=name,
                     category=cat,
                     unit_price=d2(price),
@@ -592,7 +603,7 @@ class Command(BaseCommand):
                     min_quantity=d2(20),
                     max_quantity=d2(200),
                     unit_cost=d2(price * Decimal("0.35")),
-                    sku=f"OPS-MB-{i:03d}",
+                    sku=f"{ops_prefix(hotel)}-MB-{i:03d}",
                     notes=SEED_TAG,
                 )
             )
@@ -603,7 +614,7 @@ class Command(BaseCommand):
             total = Decimal("0")
             ch = MinibarCharge.objects.create(
                 hotel=hotel,
-                display_code=code("MB", i),
+                display_code=code(hotel, "MB", i),
                 room=res.room,
                 reservation=res,
                 charge_date=today,
@@ -646,7 +657,7 @@ class Command(BaseCommand):
             total = Decimal("0")
             order = LaundryOrder.objects.create(
                 hotel=hotel,
-                display_code=code("LD", i),
+                display_code=code(hotel, "LD", i),
                 room=res.room,
                 reservation=res,
                 guest_name=res.primary_guest_name,
@@ -699,7 +710,7 @@ class Command(BaseCommand):
             paid = d2(total * Decimal("0.4"))
             gb = GroupBooking.objects.create(
                 hotel=hotel,
-                display_code=code("GR", i),
+                display_code=code(hotel, "GR", i),
                 name=name,
                 leader_name=members[0].primary_guest_name if members else "Grup lideri",
                 phone="0532 111 2233",
@@ -738,7 +749,7 @@ class Command(BaseCommand):
         for i, (name, typ, hall, day, pax, amt) in enumerate(events, start=1):
             BanquetEvent.objects.create(
                 hotel=hotel,
-                display_code=code("BQ", i),
+                display_code=code(hotel, "BQ", i),
                 name=name,
                 event_type=typ,
                 hall_name=hall,
@@ -775,7 +786,7 @@ class Command(BaseCommand):
                 returned = inhouse[0].primary_guest_name
             LostFoundItem.objects.create(
                 hotel=hotel,
-                display_code=code("LF", i),
+                display_code=code(hotel, "LF", i),
                 title=title,
                 category=cat,
                 location_found=f"Oda {room.room_number}" if room else "Lobi",
@@ -801,7 +812,7 @@ class Command(BaseCommand):
             res = inhouse[i % len(inhouse)] if inhouse else None
             TourOffer.objects.create(
                 hotel=hotel,
-                display_code=code("TO", i),
+                display_code=code(hotel, "TO", i),
                 name=name,
                 tour_kind=kind,
                 guest_name=res.primary_guest_name if res else "Misafir",
@@ -814,7 +825,7 @@ class Command(BaseCommand):
         for i, res in enumerate(pool, start=1):
             GuestTransfer.objects.create(
                 hotel=hotel,
-                display_code=code("XF", i),
+                display_code=code(hotel, "XF", i),
                 direction="arrival" if i % 2 else "departure",
                 guest_name=res.primary_guest_name,
                 location_label="IST Havalimanı",
@@ -837,7 +848,7 @@ class Command(BaseCommand):
             eh, em = en.split(":")
             EntertainmentActivity.objects.create(
                 hotel=hotel,
-                display_code=code("EA", i),
+                display_code=code(hotel, "EA", i),
                 name=name,
                 start_time=time(int(sh), int(sm)),
                 end_time=time(int(eh), int(em)),
@@ -853,7 +864,7 @@ class Command(BaseCommand):
         ):
             EntertainmentShow.objects.create(
                 hotel=hotel,
-                display_code=code("ES", i),
+                display_code=code(hotel, "ES", i),
                 title=title,
                 show_date_label=when,
                 start_time=time(hh, 0),
@@ -880,7 +891,7 @@ class Command(BaseCommand):
         for i, g in enumerate(guests[:8], start=1):
             KvkkConsent.objects.create(
                 hotel=hotel,
-                display_code=code("KV", i),
+                display_code=code(hotel, "KV", i),
                 guest_name=f"{g.first_name} {g.last_name}".strip(),
                 consent_type="aydınlatma" if i % 2 else "pazarlama",
                 consent_status="granted",
@@ -960,7 +971,7 @@ class Command(BaseCommand):
             room = inhouse[(i - 1) % len(inhouse)].room if inhouse and inhouse[(i - 1) % len(inhouse)].room else dirty[i % len(dirty)]
             OperationalTask.objects.create(
                 hotel=hotel,
-                display_code=code("TK", i),
+                display_code=code(hotel, "TK", i),
                 category=cat,
                 room=room,
                 title=title,
@@ -987,7 +998,7 @@ class Command(BaseCommand):
         for i, (name, kind, st) in enumerate(specs, start=1):
             integ = IntegrationConnection.objects.create(
                 hotel=hotel,
-                display_code=code("IN", i),
+                display_code=code(hotel, "IN", i),
                 name=name,
                 integration_kind=kind,
                 connection_status=st,

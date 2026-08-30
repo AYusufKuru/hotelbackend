@@ -130,7 +130,9 @@ class Command(BaseCommand):
         n_po = PurchaseOrder.objects.filter(hotel=hotel, display_code__startswith="TST-PO-").delete()[0]
         n_fa = FixedAsset.objects.filter(hotel=hotel, code__startswith="TST-FA-").delete()[0]
         n_bp = BusinessPartner.objects.filter(hotel=hotel, code__startswith="TST-").delete()[0]
-        n_db = DepartmentBudget.objects.filter(hotel=hotel, display_code__startswith="TST-BDG-").delete()[0]
+        n_db = DepartmentBudget.objects.filter(
+            hotel=hotel, display_code__startswith=f"TST-BDG-{hotel.code}-"
+        ).delete()[0]
         n_gl = GLAccount.objects.filter(hotel=hotel, code__startswith=GL_PREFIX).delete()[0]
         self.stdout.write(
             f"Silindi: yevmiye={n_j}, fatura={n_inv}, PO={n_po}, demirbaş={n_fa}, "
@@ -270,7 +272,7 @@ class Command(BaseCommand):
             a = d2(b * Decimal(random.Random(2026 + i).uniform(0.72, 1.08)))
             DepartmentBudget.objects.get_or_create(
                 hotel=hotel,
-                display_code=f"TST-BDG-{year}-{i + 1:02d}",
+                display_code=f"TST-BDG-{hotel.code}-{year}-{i + 1:02d}",
                 defaults={
                     "department_name": name,
                     "fiscal_year": year,
