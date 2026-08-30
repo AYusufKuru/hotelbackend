@@ -9,6 +9,7 @@ from hotelcrm.rbac import (
     can_manage_modules,
     can_manage_users,
     permission_codes_for_user,
+    user_belongs_to_hotel,
     visible_module_ids,
 )
 
@@ -74,5 +75,6 @@ class HotelSessionView(APIView):
                     "can_assign_tasks": can_assign_tasks(u, hotel_id),
                 },
                 "visible_module_ids": vis,
+                "has_hotel_access": user_belongs_to_hotel(u, hotel_id),
             },
         )

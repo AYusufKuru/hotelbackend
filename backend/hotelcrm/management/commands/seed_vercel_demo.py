@@ -9,6 +9,8 @@ Ortam: SEED_DEMO_ON_DEPLOY=1 (veya true/yes/on). Acik degilse komut hicbir sey y
 PMS: varsayilan olarak seed_pms_test_data --compact (Vercel build suresi kisa).
 Tam agir yuk: SEED_DEMO_FULL=1 (dakikalar surebilir; zaman asimi riski).
 
+(PMS komutu bitince otomatik olarak İK demo personeli de yüklenir: `seed_hr_test_data`.)
+
 Sira: seed_demo_hotel -> seed_pms_test_data --wipe [--compact] -> seed_accounting_test_data --wipe
 """
 
@@ -57,5 +59,8 @@ class Command(BaseCommand):
 
         self.stdout.write("seed_vercel_demo: accounting seed (wipe then load)...")
         call_command("seed_accounting_test_data", hotel=hotel, wipe=True)
+
+        self.stdout.write("seed_vercel_demo: stock seed (wipe then load)...")
+        call_command("seed_stock_demo", hotel=hotel, wipe=True)
 
         self.stdout.write(self.style.SUCCESS("seed_vercel_demo: done."))

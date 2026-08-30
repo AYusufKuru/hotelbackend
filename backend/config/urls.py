@@ -17,8 +17,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from hotelcrm.survey_views import public_survey_page
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
     path('api/', include('hotelcrm.urls')),
+    path('survey/<uuid:token>/', public_survey_page, name='survey-public'),
 ]

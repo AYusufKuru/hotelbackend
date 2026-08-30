@@ -4,12 +4,12 @@ from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .competitor_search import enrich_with_prices, fetch_nearby_hotels
 from .models import CompetitorHotel, Hotel
+from .permissions import HasHotelModule
 
 
 def _parse_decimal(v):
@@ -37,7 +37,8 @@ class CompetitorAutoSearchView(APIView):
       }
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasHotelModule]
+    required_modules = ("global-vision", "revenue", "ai-strategy")
 
     def post(self, request, *args, **kwargs):
         hotel_id = request.data.get("hotel")

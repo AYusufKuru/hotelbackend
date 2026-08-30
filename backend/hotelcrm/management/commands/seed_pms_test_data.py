@@ -10,6 +10,8 @@ Kullanım:
 
 İşaretler: room_type SEED_*; guest *@seed.hotelcrm.test (TR: demo TCKN; diğer uyruklar: demo pasaport);
 reservation notes [seed-pms-test]; kasa satırları description içinde [seed-cash].
+
+Komut sonunda `seed_hr_test_data` çağrılır (display_code HR-DEMO-*, zengin hr_profile + örnek eksiklik kayıtları).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Max, Sum
@@ -205,11 +208,6 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--hotel", default="DEMO", help="Otel code")
         parser.add_argument(
-            "--wipe",
-            action="store_true",
-            help="Önce [seed-pms-test] ile işaretli rezervasyon / seed oda ve misafirleri siler.",
-        )
-        parser.add_argument(
             "--compact",
             action="store_true",
             help="Vercel/CI icin kucuk veri seti (az oda, misafir, rezervasyon).",
@@ -258,6 +256,9 @@ class Command(BaseCommand):
                 f"{n_res} rezervasyon, {n_pay} ödeme kaydı, kasa gelir={n_cash_in} gider={n_cash_ex}"
             )
         )
+
+        call_command("seed_hr_test_data", hotel=code, compact=compact)
+        self.stdout.write(self.style.SUCCESS(f"İK demo personeli senkron: {code}"))
 
     def _wipe(self, hotel: Hotel) -> None:
         res_q = Reservation.objects.filter(hotel=hotel, notes__contains=SEED_NOTE)

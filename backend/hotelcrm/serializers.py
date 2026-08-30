@@ -2,7 +2,14 @@
 
 from rest_framework import serializers
 
+from hotelcrm.models.authz import UserRole
 from hotelcrm.models.property_guest import Guest
+from hotelcrm.models.reservation_folio import Reservation
+from hotelcrm.reservation_availability import (
+    check_room_availability,
+    merged_stay_fields,
+    require_room_for_blocking_reservation,
+)
 
 
 class GuestSerializer(serializers.ModelSerializer):
@@ -25,6 +32,47 @@ class GuestSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class ReservationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Reservation
+        fields = "__all__"
+
+    def validate(self, attrs):
+        room, check_in, check_out, status = merged_stay_fields(self.instance, attrs)
+        require_room_for_blocking_reservation(
+            instance=self.instance,
+            room=room,
+            status=status,
+        )
+        check_room_availability(
+            room=room,
+            check_in=check_in,
+            check_out=check_out,
+            status=status,
+            exclude_reservation_id=getattr(self.instance, "pk", None),
+            lock_room=False,
+        )
+        return attrs
+
+
+class UserRoleSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source="user.username", read_only=True)
+    role_code = serializers.CharField(source="role.code", read_only=True)
+    role_name = serializers.CharField(source="role.name", read_only=True)
+
+    class Meta:
+        model = UserRole
+        fields = (
+            "id",
+            "user",
+            "user_username",
+            "role",
+            "role_code",
+            "role_name",
+            "hotel",
+        )
+
+
 def _serializer(model):
     meta = type("Meta", (), {"model": model, "fields": "__all__"})
     name = f"{model.__name__}Serializer"
@@ -38,6 +86,10 @@ def get_serializer(model):
     if model not in _SERIALIZER_CACHE:
         if model is Guest:
             _SERIALIZER_CACHE[model] = GuestSerializer
+        elif model is Reservation:
+            _SERIALIZER_CACHE[model] = ReservationSerializer
+        elif model is UserRole:
+            _SERIALIZER_CACHE[model] = UserRoleSerializer
         else:
             _SERIALIZER_CACHE[model] = _serializer(model)
     return _SERIALIZER_CACHE[model]

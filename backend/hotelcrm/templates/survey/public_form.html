@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{{ invitation.hotel.name }} — Misafir Anketi</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: #f1f5f9; color: #1e293b; }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 24px 16px 48px; }
+    .card { background: #fff; border-radius: 20px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,.06); }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    .sub { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+    .q { margin-bottom: 22px; }
+    .q > label { display: block; font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+    .stars { display: flex; gap: 6px; flex-direction: row-reverse; justify-content: flex-end; }
+    .stars input { display: none; }
+    .stars label { font-size: 32px; cursor: pointer; color: #cbd5e1; line-height: 1; }
+    .stars input:checked ~ label, .stars label:hover, .stars label:hover ~ label { color: #f59e0b; }
+    .yn { display: flex; gap: 10px; }
+    .yn label { flex: 1; text-align: center; padding: 12px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: 700; }
+    .yn input { display: none; }
+    .yn label:has(input:checked) { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
+    textarea { width: 100%; min-height: 90px; padding: 12px; border: 1.5px solid #e2e8f0; border-radius: 12px; font-size: 15px; resize: vertical; }
+    .err { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+    .btn { width: 100%; padding: 14px; border: none; background: #1e293b; color: #fff; font-size: 16px; font-weight: 800; border-radius: 14px; cursor: pointer; margin-top: 8px; }
+    .done { text-align: center; padding: 32px 16px; }
+    .done h2 { color: #10b981; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      {% if completed %}
+        <div class="done">
+          <h2>Teşekkürler!</h2>
+          <p>Görüşleriniz kaydedildi. İyi günler dileriz.</p>
+          <p style="color:#94a3b8;font-size:13px;">{{ invitation.hotel.name }}</p>
+        </div>
+      {% else %}
+        <h1>{{ invitation.hotel.name }}</h1>
+        <p class="sub">Sayın {{ invitation.guest_name }}, kısa anketimizi doldurur musunuz?</p>
+        {% if error %}<div class="err">{{ error }}</div>{% endif %}
+        <form method="post">
+          {% csrf_token %}
+          {% for q in questions %}
+            <div class="q">
+              <label>{{ q.label }}</label>
+              {% if q.type == "rating" %}
+                <div class="stars">
+                  {% for n in "54321" %}
+                    <input type="radio" name="{{ q.id }}" id="{{ q.id }}_{{ n }}" value="{{ n }}" required/>
+                    <label for="{{ q.id }}_{{ n }}">★</label>
+                  {% endfor %}
+                </div>
+              {% elif q.type == "yesno" %}
+                <div class="yn">
+                  <label><input type="radio" name="{{ q.id }}" value="yes" required/> Evet</label>
+                  <label><input type="radio" name="{{ q.id }}" value="no"/> Hayır</label>
+                </div>
+              {% else %}
+                <textarea name="{{ q.id }}" placeholder="Yorumunuz..."></textarea>
+              {% endif %}
+            </div>
+          {% endfor %}
+          <button type="submit" class="btn">Gönder</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

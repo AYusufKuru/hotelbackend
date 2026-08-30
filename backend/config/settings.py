@@ -16,6 +16,8 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+from corsheaders.defaults import default_headers
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -75,6 +77,7 @@ MIDDLEWARE = [
     'accounts.middleware.LicenseGateMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'hotelcrm.middleware_activity.ActivityLogMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -194,6 +197,12 @@ else:
         if _u and _u not in CORS_ALLOWED_ORIGINS:
             CORS_ALLOWED_ORIGINS.append(_u)
     CORS_ALLOW_CREDENTIALS = True
+
+# Desktop istemcisi seçili oteli X-Hotel-Id ile gönderir (activity log + scoped API).
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    "x-hotel-id",
+)
 
 # --- DRF ---
 REST_FRAMEWORK = {

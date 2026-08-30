@@ -1,3 +1,4 @@
+from .access_grant import UserModuleGrant
 from .authz import (
     AuditLog,
     HotelModuleOverride,
@@ -24,6 +25,7 @@ from .extended import (
     GuestFeedbackEntry,
     GuestTransfer,
     GroupBooking,
+    GroupBookingMember,
     IntegrationConnection,
     IntegrationEventLog,
     JournalEntry,
@@ -41,17 +43,24 @@ from .extended import (
 from .fnb_spa import MenuCategory, MenuItem, RestaurantOrder, RestaurantOrderLine, SpaAppointment, SpaService
 from .minibar_laundry_inv import (
     InventoryItem,
+    InventoryStockLot,
     LaundryOrder,
     LaundryOrderLine,
     LaundryPricelistItem,
     MinibarCharge,
     MinibarChargeLine,
     MinibarProduct,
+    StockCountLine,
+    StockCountSession,
+    StockMovement,
+    StockMovementType,
 )
 from .payments_tasks import CashTransaction, Notification, OperationalTask, Payment
 from .property_guest import Channel, CompetitorHotel, Guest, Hotel, Room, RoomType
 from .reservation_folio import Folio, FolioLine, Reservation, ReservationOccupant
-from .staff import Department, StaffAbsenceReport, StaffMember
+from .it_monitoring import ItAlarmWebhook, ItAlertLog, ItMetricSample
+from .survey import HotelSurveySmsSettings, SurveyInvitation
+from .staff import Department, HotelRecruitment, StaffAbsenceReport, StaffMember
 
 __all__ = [
     "AuditLog",
@@ -59,6 +68,7 @@ __all__ = [
     "Role",
     "RolePermission",
     "UserRole",
+    "UserModuleGrant",
     "HotelModuleOverride",
     "Hotel",
     "RoomType",
@@ -74,6 +84,7 @@ __all__ = [
     "Payment",
     "Department",
     "StaffMember",
+    "HotelRecruitment",
     "StaffAbsenceReport",
     "OperationalTask",
     "Notification",
@@ -90,8 +101,14 @@ __all__ = [
     "LaundryOrder",
     "LaundryOrderLine",
     "InventoryItem",
+    "InventoryStockLot",
+    "StockMovement",
+    "StockMovementType",
+    "StockCountSession",
+    "StockCountLine",
     "KbsGuestSubmission",
     "GroupBooking",
+    "GroupBookingMember",
     "BanquetEvent",
     "LostFoundItem",
     "TravelAgency",
@@ -114,6 +131,11 @@ __all__ = [
     "CrsSyncLog",
     "IntegrationConnection",
     "IntegrationEventLog",
+    "ItMetricSample",
+    "ItAlarmWebhook",
+    "ItAlertLog",
+    "HotelSurveySmsSettings",
+    "SurveyInvitation",
     "PurchaseOrder",
     "GuestFeedbackEntry",
     "ChannelManagerSettings",

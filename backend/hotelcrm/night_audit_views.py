@@ -10,9 +10,11 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from hotelcrm.activity_log import serialize_audit_row
+from hotelcrm.permissions import HasHotelModule
 
 from .models import (
     AuditLog,
@@ -44,7 +46,8 @@ class NightAuditRunView(APIView):
     Body: { "hotel": "<uuid>", "business_date": "YYYY-MM-DD" (opsiyonel), "force": false }
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasHotelModule]
+    required_modules = ("night-audit",)
 
     def post(self, request, *args, **kwargs):
         hotel_id = request.data.get("hotel")
@@ -93,6 +96,7 @@ class NightAuditRunView(APIView):
                 else "Açık borçlu folio yok"
             )
             AuditLog.objects.create(
+                hotel=hotel,
                 user=user,
                 user_label=user_label,
                 module="night_audit",
@@ -110,6 +114,7 @@ class NightAuditRunView(APIView):
 
             # 2) Gece sayacı / iş günü — otel üzerinde anlamsal onay (sayı tutulmuyorsa log)
             AuditLog.objects.create(
+                hotel=hotel,
                 user=user,
                 user_label=user_label,
                 module="night_audit",
@@ -146,6 +151,7 @@ class NightAuditRunView(APIView):
                 f"dolu {room_stats['occupied']}, boş {room_stats['vacant']}, arızalı {room_stats['ooo']}"
             )
             AuditLog.objects.create(
+                hotel=hotel,
                 user=user,
                 user_label=user_label,
                 module="night_audit",
@@ -180,6 +186,7 @@ class NightAuditRunView(APIView):
             net = total_gelir - total_gider
 
             AuditLog.objects.create(
+                hotel=hotel,
                 user=user,
                 user_label=user_label,
                 module="night_audit",
@@ -203,6 +210,7 @@ class NightAuditRunView(APIView):
                 journal_id = str(je.id)
             elif not gl:
                 AuditLog.objects.create(
+                    hotel=hotel,
                     user=user,
                     user_label=user_label,
                     module="night_audit",
@@ -211,6 +219,7 @@ class NightAuditRunView(APIView):
                 )
             elif gl and net == 0:
                 AuditLog.objects.create(
+                    hotel=hotel,
                     user=user,
                     user_label=user_label,
                     module="night_audit",
@@ -254,6 +263,7 @@ class NightAuditRunView(APIView):
                 else "KBS: bekleyen yok"
             )
             AuditLog.objects.create(
+                hotel=hotel,
                 user=user,
                 user_label=user_label,
                 module="night_audit",
@@ -271,6 +281,7 @@ class NightAuditRunView(APIView):
 
             # 6) Yedekleme — operasyonel hatırlatma (otomatik yedek yok)
             AuditLog.objects.create(
+                hotel=hotel,
                 user=user,
                 user_label=user_label,
                 module="night_audit",
@@ -301,3 +312,30 @@ class NightAuditRunView(APIView):
                 "summary": summary,
             }
         )
+
+
+class NightAuditHistoryView(APIView):
+    """GET /api/night-audit/history/?hotel=&limit= — gece raporu denetim günlüğü."""
+
+    permission_classes = [HasHotelModule]
+    required_modules = ("night-audit",)
+
+    def get(self, request):
+        hotel_id = request.query_params.get("hotel")
+        if not hotel_id:
+            return Response({"detail": "hotel gerekli"}, status=400)
+        try:
+            Hotel.objects.get(pk=hotel_id)
+        except Hotel.DoesNotExist:
+            return Response({"detail": "Otel bulunamadı"}, status=404)
+
+        try:
+            limit = min(max(int(request.query_params.get("limit", 300)), 1), 500)
+        except (TypeError, ValueError):
+            limit = 300
+
+        rows = list(
+            AuditLog.objects.filter(hotel_id=hotel_id, module="night_audit")
+            .order_by("-occurred_at")[:limit]
+        )
+        return Response({"logs": [serialize_audit_row(r) for r in rows]})

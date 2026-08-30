@@ -39,6 +39,31 @@ class Hotel(models.Model):
         default="",
         help_text="Ticari unvan (fatura üst bilgisi)",
     )
+    # Pansiyon farkı: oda gecelik ücrete ek, kişi başı / gece (₺).
+    board_rate_bb = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text="Oda kahvaltı (BB) kişi başı gece farkı (₺)",
+    )
+    board_rate_hb = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=350,
+        help_text="Yarım pansiyon (HB) kişi başı gece farkı (₺)",
+    )
+    board_rate_fb = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=550,
+        help_text="Tam pansiyon (FB) kişi başı gece farkı (₺)",
+    )
+    board_rate_ai = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=750,
+        help_text="Her şey dahil (AI) kişi başı gece farkı (₺)",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

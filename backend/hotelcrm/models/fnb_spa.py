@@ -3,6 +3,7 @@ import uuid
 from django.db import models
 
 from .enums import RestaurantOrderStatus, SpaAppointmentStatus
+from .minibar_laundry_inv import InventoryItem
 from .property_guest import Hotel, Room
 from .reservation_folio import Reservation
 
@@ -60,6 +61,14 @@ class RestaurantOrderLine(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order = models.ForeignKey(RestaurantOrder, on_delete=models.CASCADE, related_name="lines")
     menu_item = models.ForeignKey(MenuItem, on_delete=models.SET_NULL, null=True, blank=True, related_name="order_lines")
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="restaurant_order_lines",
+        help_text="POS satırı stok kalemiyle eşleşir; menü kalemi tutulmaz.",
+    )
     item_name = models.CharField(max_length=255)
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)

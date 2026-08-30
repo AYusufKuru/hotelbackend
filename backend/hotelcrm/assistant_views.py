@@ -15,7 +15,6 @@ import re
 from typing import Any, TypedDict
 
 import requests
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from hotelcrm.assistant_context import (
@@ -28,6 +27,7 @@ from hotelcrm.assistant_context import (
     reply_inside_guest_count_from_digest,
     resolve_hotel_id,
 )
+from hotelcrm.permissions import HasHotelModule
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,8 @@ def _resolve_llm() -> _LlmEndpoint | None:
 class AssistantChatView(APIView):
     """POST JSON: { \"messages\": [ {\"role\":\"user\"|\"assistant\", \"content\": \"...\"} ] }"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasHotelModule]
+    required_modules = ("dashboard", "ai-strategy")
 
     def post(self, request):
         raw_messages = request.data.get("messages")

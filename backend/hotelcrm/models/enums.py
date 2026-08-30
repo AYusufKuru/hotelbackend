@@ -33,6 +33,7 @@ class LoyaltyTier(models.TextChoices):
 class BoardBasis(models.TextChoices):
     BB = "BB", "BB"
     HB = "HB", "HB"
+    FB = "FB", "FB"
     AI = "AI", "AI"
 
 
@@ -68,11 +69,23 @@ class StaffStatus(models.TextChoices):
     INACTIVE = "inactive", "Inactive"
 
 
+class StaffOnboardingStatus(models.TextChoices):
+    """İK kaydı → IT onayı akışı (kimlik / rol ataması tamamlanana kadar)."""
+
+    PENDING_IT = "pending_it", "IT onayı bekliyor"
+    ACTIVE = "active", "Sistemde aktif (IT tamamladı)"
+
+
 class StaffAbsenceReason(models.TextChoices):
     SICK = "sick", "Hastalık / rapor"
     ANNUAL = "annual", "Yıllık izin"
     UNEXCUSED = "unexcused", "Mazeretsiz devamsızlık"
     EXCUSED = "excused", "Mazeretli devamsızlık"
+    MATERNITY = "maternity", "Doğum / analık izin"
+    BEREAVEMENT = "bereavement", "Ölüm izni"
+    UNPAID = "unpaid_leave", "Ücretsiz izin"
+    EDUCATION = "education", "Eğitim / seminer (ücretli)"
+    MILITARY = "military", "Askerlik / idari izin"
     OTHER = "other", "Diğer"
 
 

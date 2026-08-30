@@ -13,7 +13,7 @@ from .enums import (
     PurchaseOrderStatus,
     SalesLeadStage,
 )
-from .property_guest import Hotel
+from .property_guest import Hotel, Room
 from .reservation_folio import Reservation
 
 
@@ -49,6 +49,40 @@ class GroupBooking(models.Model):
 
     class Meta:
         db_table = "hotelcrm_groupbooking"
+
+
+class GroupBookingMember(models.Model):
+    """Grup içindeki misafir — oda ve tekil rezervasyon bağlantısı."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group_booking = models.ForeignKey(
+        GroupBooking,
+        on_delete=models.CASCADE,
+        related_name="members",
+    )
+    full_name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=64, blank=True)
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="group_booking_members",
+    )
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="group_booking_member_links",
+    )
+    sequence = models.PositiveSmallIntegerField(default=0)
+    is_leader = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "hotelcrm_groupbookingmember"
+        ordering = ["sequence", "id"]
 
 
 class BanquetEvent(models.Model):
@@ -415,6 +449,13 @@ class CrsSyncLog(models.Model):
 
 
 class IntegrationConnection(models.Model):
+    def save(self, *args, **kwargs):
+        if self.monitor_enabled and not self.agent_token:
+            import secrets
+
+            self.agent_token = secrets.token_urlsafe(32)
+        super().save(*args, **kwargs)
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, null=True, blank=True, related_name="integration_connections")
     display_code = models.CharField(max_length=32, unique=True, null=True, blank=True)
@@ -423,6 +464,16 @@ class IntegrationConnection(models.Model):
     connection_status = models.CharField(max_length=16, blank=True)
     api_key_ref = models.CharField(max_length=128, blank=True)
     last_sync_label = models.CharField(max_length=64, blank=True)
+    monitor_enabled = models.BooleanField(default=False)
+    agent_token = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    host_hostname = models.CharField(max_length=255, blank=True)
+    uptime_started_at = models.DateTimeField(null=True, blank=True)
+    last_heartbeat_at = models.DateTimeField(null=True, blank=True)
+    cpu_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    memory_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    disk_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    network_mbps_in = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    network_mbps_out = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
 
     class Meta:
         db_table = "hotelcrm_integrationconnection"

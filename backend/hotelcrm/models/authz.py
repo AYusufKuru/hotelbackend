@@ -77,6 +77,24 @@ class AuditLog(models.Model):
         blank=True,
         related_name="hotelcrm_audit_logs",
     )
+    hotel = models.ForeignKey(
+        "hotelcrm.Hotel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs_about",
+    )
+    target_user_label = models.CharField(max_length=128, blank=True)
+    ip_address = models.CharField(max_length=45, blank=True)
+    entity_type = models.CharField(max_length=64, blank=True)
+    entity_id = models.CharField(max_length=128, blank=True)
     module = models.CharField(max_length=64, blank=True)
     action = models.CharField(max_length=32, blank=True)
     message = models.TextField(blank=True)
@@ -84,3 +102,8 @@ class AuditLog(models.Model):
     class Meta:
         db_table = "hotelcrm_auditlog"
         ordering = ["-occurred_at"]
+        indexes = [
+            models.Index(fields=["-occurred_at"]),
+            models.Index(fields=["hotel", "-occurred_at"]),
+            models.Index(fields=["user", "-occurred_at"]),
+        ]
