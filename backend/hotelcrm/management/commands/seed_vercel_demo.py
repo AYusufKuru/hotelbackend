@@ -51,16 +51,20 @@ class Command(BaseCommand):
                 "seed_vercel_demo: full PMS seed (SEED_DEMO_FULL=1) — this may take several minutes."
             )
 
-        self.stdout.write("seed_vercel_demo: ensuring DEMO hotel...")
-        call_command("seed_demo_hotel")
+        try:
+            self.stdout.write("seed_vercel_demo: ensuring DEMO hotel...")
+            call_command("seed_demo_hotel")
 
-        self.stdout.write("seed_vercel_demo: PMS seed (wipe then load)...")
-        call_command("seed_pms_test_data", hotel=hotel, wipe=True, compact=pms_compact)
+            self.stdout.write("seed_vercel_demo: PMS seed (wipe then load)...")
+            call_command("seed_pms_test_data", hotel=hotel, wipe=True, compact=pms_compact)
 
-        self.stdout.write("seed_vercel_demo: accounting seed (wipe then load)...")
-        call_command("seed_accounting_test_data", hotel=hotel, wipe=True)
+            self.stdout.write("seed_vercel_demo: accounting seed (wipe then load)...")
+            call_command("seed_accounting_test_data", hotel=hotel, wipe=True)
 
-        self.stdout.write("seed_vercel_demo: stock seed (wipe then load)...")
-        call_command("seed_stock_demo", hotel=hotel, wipe=True)
+            self.stdout.write("seed_vercel_demo: stock seed (wipe then load)...")
+            call_command("seed_stock_demo", hotel=hotel, wipe=True)
+        except Exception as exc:
+            self.stderr.write(self.style.ERROR(f"seed_vercel_demo başarısız (yayın devam eder): {exc}"))
+            return
 
         self.stdout.write(self.style.SUCCESS("seed_vercel_demo: done."))
