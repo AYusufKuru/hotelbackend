@@ -33,9 +33,14 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        if not _truthy("SEED_DEMO_ON_DEPLOY"):
+        on_vercel = (os.environ.get("VERCEL") or "").strip() == "1"
+        skip = (os.environ.get("SEED_DEMO_ON_DEPLOY") or "").strip().lower() in ("0", "false", "no", "off")
+        if skip:
+            self.stdout.write("seed_vercel_demo: skipped (SEED_DEMO_ON_DEPLOY=0).")
+            return
+        if not on_vercel and not _truthy("SEED_DEMO_ON_DEPLOY"):
             self.stdout.write(
-                "seed_vercel_demo: skipped (set SEED_DEMO_ON_DEPLOY=1 on Vercel to load demo data)."
+                "seed_vercel_demo: skipped (yerelde SEED_DEMO_ON_DEPLOY=1 verin; Vercel'de otomatik çalışır)."
             )
             return
 
@@ -63,6 +68,9 @@ class Command(BaseCommand):
 
             self.stdout.write("seed_vercel_demo: stock seed (wipe then load)...")
             call_command("seed_stock_demo", hotel=hotel, wipe=True)
+
+            self.stdout.write("seed_vercel_demo: ops/modül seed (wipe then load)...")
+            call_command("seed_ops_demo", hotel=hotel, wipe=True)
         except Exception as exc:
             self.stderr.write(self.style.ERROR(f"seed_vercel_demo başarısız (yayın devam eder): {exc}"))
             return
