@@ -1,25 +1,22 @@
-"""
-Vercel (veya baska CI) build/deploy: DEMO otel + PMS + muhasebe demo verisi.
+"""Vercel deploy: 25 inceleme oteli + kullanici + demo veri.
 
-Her calistirmada once --wipe ile isaretli tohum kayitlari silinir, sonra yeniden uretilir;
-ard arda build alinsa bile cift kayit birikmez.
+count=25 GECERSIZDIR (seed_trial_hotels --count kabul etmez); o hata
+yayinda sessizce yutuluyordu, bu yuzden sadece admin kaliyordu.
 
-Ortam: SEED_DEMO_ON_DEPLOY=1 (veya true/yes/on). Acik degilse komut hicbir sey yapmaz (cikis 0).
-
-PMS: varsayilan olarak seed_pms_test_data --compact (Vercel build suresi kisa).
-Tam agir yuk: SEED_DEMO_FULL=1 (dakikalar surebilir; zaman asimi riski).
-
-(PMS komutu bitince otomatik olarak İK demo personeli de yüklenir: `seed_hr_test_data`.)
-
-Sira: seed_demo_hotel -> seed_pms_test_data --wipe [--compact] -> seed_accounting_test_data --wipe
+Once kullanicilar (--skip-data), sonra demo veri. Veri adimi duserse
+kullanicilar yine de kalir. Sonraki deploy'larda wipe yapilmaz
+(SEED_DEMO_FORCE=1 ile zorla yeniden tohumlanir).
 """
 
 from __future__ import annotations
 
 import os
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+
+User = get_user_model()
 
 
 def _truthy(name: str) -> bool:
@@ -27,10 +24,7 @@ def _truthy(name: str) -> bool:
 
 
 class Command(BaseCommand):
-    help = (
-        "Vercel deploy demo verisi: SEED_DEMO_ON_DEPLOY=1 iken DEMO otel, PMS ve muhasebe "
-        "tohumunu once siler sonra yukler."
-    )
+    help = "Vercel: 25 inceleme oteli, kullanici ve demo veri."
 
     def handle(self, *args, **options):
         on_vercel = (os.environ.get("VERCEL") or "").strip() == "1"
@@ -44,11 +38,32 @@ class Command(BaseCommand):
             )
             return
 
+        already = User.objects.filter(username="pera.yonetim").exists()
+        force = _truthy("SEED_DEMO_FORCE")
+
         try:
-            self.stdout.write("seed_vercel_demo: 25 inceleme oteli + üyelik + veri...")
-            call_command("seed_trial_hotels", count=25)
+            self.stdout.write("seed_vercel_demo: 25 otel + kullanici...")
+            call_command("seed_trial_hotels", skip_data=True)
         except Exception as exc:
-            self.stderr.write(self.style.ERROR(f"seed_vercel_demo başarısız (yayın devam eder): {exc}"))
+            self.stderr.write(self.style.ERROR(f"seed_vercel_demo kullanicilar basarisiz: {exc}"))
+            raise
+
+        if already and not force:
+            self.stdout.write(
+                "seed_vercel_demo: kullanicilar zaten vardi; demo veri wipe atlandi "
+                "(yeniden tohum icin SEED_DEMO_FORCE=1)."
+            )
+            self.stdout.write(self.style.SUCCESS("seed_vercel_demo: done."))
             return
+
+        try:
+            self.stdout.write("seed_vercel_demo: demo veri (PMS/muhasebe/stok/ops)...")
+            call_command("seed_trial_hotels")
+        except Exception as exc:
+            self.stderr.write(
+                self.style.ERROR(
+                    f"seed_vercel_demo veri adimi basarisiz (kullanicilar yuklu kalir): {exc}"
+                )
+            )
 
         self.stdout.write(self.style.SUCCESS("seed_vercel_demo: done."))

@@ -43,7 +43,7 @@ def main() -> None:
 
     _run("migrate", ["migrate", "--noinput"], required=True)
     _run("ensure_bootstrap_user", ["ensure_bootstrap_user"], required=False)
-    _run("seed_vercel_demo", ["seed_vercel_demo"], required=False)
+    _run("seed_vercel_demo", ["seed_vercel_demo"], required=True)
 
 
 if __name__ == "__main__":

@@ -161,6 +161,9 @@ class Command(BaseCommand):
             call_command("seed_stock_demo", hotel=code, wipe=True)
             call_command("seed_ops_demo", hotel=code, wipe=True)
 
-        CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CREDENTIALS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        self.stdout.write(self.style.SUCCESS(f"Giris listesi: {CREDENTIALS_FILE}"))
+        try:
+            CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            CREDENTIALS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            self.stdout.write(self.style.SUCCESS(f"Giris listesi: {CREDENTIALS_FILE}"))
+        except OSError as exc:
+            self.stdout.write(f"txt yazilamadi (yayinda normal olabilir): {exc}")
