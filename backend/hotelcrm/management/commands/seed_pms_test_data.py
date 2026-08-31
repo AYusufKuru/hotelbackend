@@ -232,8 +232,8 @@ class Command(BaseCommand):
         today = timezone.localdate() if timezone.is_aware(timezone.now()) else date.today()
 
         compact = bool(options["compact"])
-        per_type = 2 if compact else 20
-        guest_n = 36 if compact else 240
+        per_type = 1 if compact else 20
+        guest_n = 12 if compact else 240
 
         with transaction.atomic():
             room_types = self._seed_room_types(hotel)
@@ -482,15 +482,15 @@ class Command(BaseCommand):
     ) -> tuple[int, int, int, int]:
         created_res = 0
         if compact:
-            year_ago = today - timedelta(days=90)
-            n_completed = 42
-            n_cancel = 6
-            n_inhouse = 5
+            year_ago = today - timedelta(days=45)
+            n_completed = 8
+            n_cancel = 1
+            n_inhouse = 3
             future_spans: tuple[tuple[int, int, int], ...] = (
-                (1, 40, 14),
-                (41, 85, 10),
+                (1, 21, 4),
+                (22, 45, 3),
             )
-            expense_day_prob = 0.22
+            expense_day_prob = 0.08
         else:
             year_ago = today - timedelta(days=365)
             n_completed = 920

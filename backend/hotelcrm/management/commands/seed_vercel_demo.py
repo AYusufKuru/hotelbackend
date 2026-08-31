@@ -1,7 +1,4 @@
-"""Vercel deploy: 25 inceleme oteli + kullanici + demo veri.
-
-count=25 GECERSIZDIR (seed_trial_hotels --count kabul etmez); o hata
-yayinda sessizce yutuluyordu, bu yuzden sadece admin kaliyordu.
+"""Vercel deploy: 18 inceleme oteli + kullanici + hafif demo veri.
 
 Once kullanicilar (--skip-data), sonra demo veri. Veri adimi duserse
 kullanicilar yine de kalir. Sonraki deploy'larda wipe yapilmaz
@@ -24,7 +21,7 @@ def _truthy(name: str) -> bool:
 
 
 class Command(BaseCommand):
-    help = "Vercel: 25 inceleme oteli, kullanici ve demo veri."
+    help = "Vercel: 18 inceleme oteli, kullanici ve hafif demo veri."
 
     def handle(self, *args, **options):
         on_vercel = (os.environ.get("VERCEL") or "").strip() == "1"
@@ -41,14 +38,9 @@ class Command(BaseCommand):
         already = User.objects.filter(username="pera.yonetim").exists()
         force = _truthy("SEED_DEMO_FORCE")
 
-        try:
-            self.stdout.write("seed_vercel_demo: 25 otel + kullanici...")
-            call_command("seed_trial_hotels", skip_data=True)
-        except Exception as exc:
-            self.stderr.write(self.style.ERROR(f"seed_vercel_demo kullanicilar basarisiz: {exc}"))
-            raise
-
         if already and not force:
+            self.stdout.write("seed_vercel_demo: 18 otel kullanici senkron (--skip-data)...")
+            call_command("seed_trial_hotels", skip_data=True)
             self.stdout.write(
                 "seed_vercel_demo: kullanicilar zaten vardi; demo veri wipe atlandi "
                 "(yeniden tohum icin SEED_DEMO_FORCE=1)."
@@ -57,13 +49,10 @@ class Command(BaseCommand):
             return
 
         try:
-            self.stdout.write("seed_vercel_demo: demo veri (PMS/muhasebe/stok/ops)...")
+            self.stdout.write("seed_vercel_demo: 18 otel + kullanici + hafif veri (tek gecis)...")
             call_command("seed_trial_hotels")
         except Exception as exc:
-            self.stderr.write(
-                self.style.ERROR(
-                    f"seed_vercel_demo veri adimi basarisiz (kullanicilar yuklu kalir): {exc}"
-                )
-            )
+            self.stderr.write(self.style.ERROR(f"seed_vercel_demo basarisiz: {exc}"))
+            raise
 
         self.stdout.write(self.style.SUCCESS("seed_vercel_demo: done."))

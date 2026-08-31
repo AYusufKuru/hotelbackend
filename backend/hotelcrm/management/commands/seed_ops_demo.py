@@ -108,6 +108,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--hotel", default="DEMO")
         parser.add_argument("--wipe", action="store_true")
+        parser.add_argument("--compact", action="store_true")
 
     def handle(self, *args, **options):
         hotel = Hotel.objects.filter(code__iexact=options["hotel"]).first()
@@ -121,6 +122,7 @@ class Command(BaseCommand):
         rnd = random.Random(20260831)
         today = timezone.localdate()
         now = timezone.now()
+        self.compact = bool(options["compact"])
 
         rooms = list(Room.objects.filter(hotel=hotel).order_by("room_number"))
         guests = list(Guest.objects.filter(hotel=hotel).order_by("display_code"))
@@ -132,12 +134,12 @@ class Command(BaseCommand):
         upcoming = list(
             Reservation.objects.filter(
                 hotel=hotel, status=ReservationStatus.UPCOMING
-            ).select_related("guest", "room")[:20]
+            ).select_related("guest", "room")[:8 if getattr(self, "compact", False) else 20]
         )
         checked_out = list(
             Reservation.objects.filter(
                 hotel=hotel, status=ReservationStatus.CHECKED_OUT
-            ).select_related("guest", "room")[:30]
+            ).select_related("guest", "room")[:8 if getattr(self, "compact", False) else 30]
         )
         staff = list(
             StaffMember.objects.filter(
@@ -244,7 +246,7 @@ class Command(BaseCommand):
             + [LoyaltyTier.GOLD] * 5
             + [LoyaltyTier.SILVER] * 8
         )
-        for i, g in enumerate(guests[:15]):
+        for i, g in enumerate(guests[:6 if getattr(self, "compact", False) else 15]):
             g.loyalty_tier = tiers[i] if i < len(tiers) else LoyaltyTier.NONE
             g.save(update_fields=["loyalty_tier"])
 
@@ -256,7 +258,7 @@ class Command(BaseCommand):
             ("Swissôtel The Bosphorus", "Bayıldım Cad. No:2", "41.042960", "29.011450", "5.0", "5400"),
             ("CVK Park Bosphorus", "Gümüşsuyu Mah. İnönü Cad.", "41.038720", "28.990210", "5.0", "3900"),
         )
-        for name, addr, lat, lng, stars, price in rows:
+        for name, addr, lat, lng, stars, price in rows[:2 if getattr(self, "compact", False) else 5]:
             CompetitorHotel.objects.create(
                 hotel=hotel,
                 name=name,
@@ -291,6 +293,8 @@ class Command(BaseCommand):
             ("Booking.com B2B", "Booking.com B.V.", "15", "NL", "James Cole"),
             ("Setur", "Setur Servis Turistik A.Ş.", "10", "TR", "Mehmet Yıldız"),
         )
+        if getattr(self, "compact", False):
+            specs = specs[:1]
         out: list[TravelAgency] = []
         for i, (name, legal, comm, country, contact) in enumerate(specs, start=1):
             ag = TravelAgency.objects.create(
@@ -371,6 +375,8 @@ class Command(BaseCommand):
             ("Düğün - Yılmaz ailesi", "Düğün + oda bloğu", SalesLeadStage.NEW_LEAD, 175000, 20),
             ("TechSummit 2026", "Kongre", SalesLeadStage.LOST, 310000, 10),
         )
+        if getattr(self, "compact", False):
+            leads = leads[:2]
         for i, (account, note, stage, value, prob) in enumerate(leads, start=1):
             SalesLead.objects.create(
                 hotel=hotel,
@@ -384,14 +390,14 @@ class Command(BaseCommand):
                 created_date=today - timedelta(days=8 * i),
                 notes=f"{note} {SEED_TAG}",
             )
-        for i, (title, seg, status, n) in enumerate(
-            (
-                ("İstanbul'da 3 gece kaçış", "çiftler", "active", 18),
-                ("Kurumsal kış kampanyası", "kurumsal", "active", 7),
-                ("Erken rezervasyon yaz 2027", "aile", "draft", 0),
-            ),
-            start=1,
-        ):
+        campaigns = (
+            ("İstanbul'da 3 gece kaçış", "çiftler", "active", 18),
+            ("Kurumsal kış kampanyası", "kurumsal", "active", 7),
+            ("Erken rezervasyon yaz 2027", "aile", "draft", 0),
+        )
+        if getattr(self, "compact", False):
+            campaigns = campaigns[:1]
+        for i, (title, seg, status, n) in enumerate(campaigns, start=1):
             MarketingCampaign.objects.create(
                 hotel=hotel,
                 display_code=code(hotel, "MC", i),
@@ -426,6 +432,8 @@ class Command(BaseCommand):
             (3, "Fırın sütlaç", 190),
             (3, "Çikolatalı sufle", 240),
         )
+        if getattr(self, "compact", False):
+            items_spec = items_spec[:4]
         menu_items = []
         for i, (ci, name, price) in enumerate(items_spec, start=1):
             menu_items.append(
@@ -470,7 +478,8 @@ class Command(BaseCommand):
 
         rest_inv = [it for it in inventory if it.usage_area == InventoryUsageArea.RESTAURANT][:4]
         targets = inhouse[:4] if inhouse else []
-        for i in range(8):
+        n_orders = 2 if getattr(self, "compact", False) else 8
+        for i in range(n_orders):
             res = targets[i] if i < len(targets) else None
             room = res.room if res and res.room_id else rnd.choice(rooms)
             picked = rnd.sample(menu_items, k=3)
@@ -536,7 +545,8 @@ class Command(BaseCommand):
                     default_therapist=therapists[i % len(therapists)],
                 )
             )
-        for i in range(6):
+        n_spa = 2 if getattr(self, "compact", False) else 6
+        for i in range(n_spa):
             res = inhouse[i % len(inhouse)] if inhouse else None
             svc = services[i % len(services)]
             st = (
@@ -580,7 +590,7 @@ class Command(BaseCommand):
         )
         products = []
         mb_items = []
-        for i, (name, cat, price) in enumerate(catalog, start=1):
+        for i, (name, cat, price) in enumerate(catalog[:3 if getattr(self, "compact", False) else 6], start=1):
             products.append(
                 MinibarProduct.objects.create(
                     hotel=hotel,
@@ -607,7 +617,8 @@ class Command(BaseCommand):
                     notes=SEED_TAG,
                 )
             )
-        for i, res in enumerate(inhouse[:5], start=1):
+        n_mb = 2 if getattr(self, "compact", False) else 5
+        for i, res in enumerate(inhouse[:n_mb], start=1):
             if not res.room_id:
                 continue
             picks = rnd.sample(list(zip(products, mb_items, strict=True)), k=2)
@@ -650,7 +661,8 @@ class Command(BaseCommand):
                     hotel=hotel, name=f"Demo {name}", unit_price=d2(price)
                 )
             )
-        for i, res in enumerate(inhouse[:4], start=1):
+        n_ld = 2 if getattr(self, "compact", False) else 4
+        for i, res in enumerate(inhouse[:n_ld], start=1):
             if not res.room_id:
                 continue
             picks = rnd.sample(prices, k=2)
@@ -704,6 +716,8 @@ class Command(BaseCommand):
                 upcoming[:4],
             ),
         )
+        if getattr(self, "compact", False):
+            blocks = blocks[:1]
         for i, (name, status, cin, cout, members) in enumerate(blocks, start=1):
             pax = max(len(members) * 2, 4)
             total = d2(sum((m.total_amount for m in members), Decimal("0")) or 48000)
@@ -746,6 +760,9 @@ class Command(BaseCommand):
             BanquetEventStatus.PENDING,
             BanquetEventStatus.COMPLETED,
         )
+        if getattr(self, "compact", False):
+            events = events[:1]
+            statuses = statuses[:1]
         for i, (name, typ, hall, day, pax, amt) in enumerate(events, start=1):
             BanquetEvent.objects.create(
                 hotel=hotel,
@@ -779,6 +796,8 @@ class Command(BaseCommand):
             ("Güneş gözlüğü", "aksesuar", "waiting"),
             ("Pasaport kılıfı", "belge", "returned"),
         )
+        if getattr(self, "compact", False):
+            items = items[:2]
         for i, (title, cat, st) in enumerate(items, start=1):
             room = inhouse[i % len(inhouse)].room if inhouse and inhouse[i % len(inhouse)].room else rooms[0]
             returned = ""
@@ -808,6 +827,8 @@ class Command(BaseCommand):
             ("Prens Adaları", "günübire", 2100),
             ("Kapalıçarşı yürüyüşü", "şehir", 650),
         )
+        if getattr(self, "compact", False):
+            tours = tours[:1]
         for i, (name, kind, price) in enumerate(tours, start=1):
             res = inhouse[i % len(inhouse)] if inhouse else None
             TourOffer.objects.create(
@@ -821,7 +842,7 @@ class Command(BaseCommand):
                 status="confirmed",
                 price=d2(price),
             )
-        pool = (inhouse + upcoming)[:4]
+        pool = (inhouse + upcoming)[:2 if getattr(self, "compact", False) else 4]
         for i, res in enumerate(pool, start=1):
             GuestTransfer.objects.create(
                 hotel=hotel,
@@ -843,6 +864,8 @@ class Command(BaseCommand):
             ("Canlı müzik", "20:30", "22:30", "Lobi bar", "müzik", "cuma-ctesi"),
             ("Su jimnastiği", "11:00", "11:40", "Havuz", "spor", "hafta içi"),
         )
+        if getattr(self, "compact", False):
+            acts = acts[:2]
         for i, (name, st, en, loc, cat, day) in enumerate(acts, start=1):
             sh, sm = st.split(":")
             eh, em = en.split(":")
@@ -858,10 +881,14 @@ class Command(BaseCommand):
                 status="active",
                 participant_count=12 + i * 3,
             )
-        for i, (title, when, hh, icon) in enumerate(
-            (("Türk gecesi", "Cuma", 21, "🎵"), ("Sihirbazlık", "Cumartesi", 20, "🎩"), ("Akustik", "Pazar", 19, "🎸")),
-            start=1,
-        ):
+        shows = (
+            ("Türk gecesi", "Cuma", 21, "🎵"),
+            ("Sihirbazlık", "Cumartesi", 20, "🎩"),
+            ("Akustik", "Pazar", 19, "🎸"),
+        )
+        if getattr(self, "compact", False):
+            shows = shows[:1]
+        for i, (title, when, hh, icon) in enumerate(shows, start=1):
             EntertainmentShow.objects.create(
                 hotel=hotel,
                 display_code=code(hotel, "ES", i),
@@ -888,7 +915,8 @@ class Command(BaseCommand):
                 "is_enabled": True,
             },
         )
-        for i, g in enumerate(guests[:8], start=1):
+        n_kvkk = 3 if getattr(self, "compact", False) else 8
+        for i, g in enumerate(guests[:n_kvkk], start=1):
             KvkkConsent.objects.create(
                 hotel=hotel,
                 display_code=code(hotel, "KV", i),
@@ -899,7 +927,8 @@ class Command(BaseCommand):
                 recorded_by="Resepsiyon",
                 note=SEED_TAG,
             )
-        for i, res in enumerate((inhouse + checked_out)[:6], start=1):
+        n_kbs = 2 if getattr(self, "compact", False) else 6
+        for i, res in enumerate((inhouse + checked_out)[:n_kbs], start=1):
             g = res.guest
             KbsGuestSubmission.objects.create(
                 hotel=hotel,
@@ -909,7 +938,8 @@ class Command(BaseCommand):
                 passport_no=g.passport_no or "",
                 nationality=g.nationality or "TR",
             )
-        for i, res in enumerate(checked_out[:8], start=1):
+        n_survey = 3 if getattr(self, "compact", False) else 8
+        for i, res in enumerate(checked_out[:n_survey], start=1):
             g = res.guest
             completed = i <= 5
             answers = {}
@@ -967,6 +997,8 @@ class Command(BaseCommand):
             (TaskCategory.TECHNICAL, "Minibar soğutmuyor", TaskStatus.PENDING, tech),
             (TaskCategory.HOUSEKEEPING, "Ekstra havlu talebi", TaskStatus.DONE, hk),
         )
+        if getattr(self, "compact", False):
+            jobs = jobs[:3]
         for i, (cat, title, st, pool) in enumerate(jobs, start=1):
             room = inhouse[(i - 1) % len(inhouse)].room if inhouse and inhouse[(i - 1) % len(inhouse)].room else dirty[i % len(dirty)]
             OperationalTask.objects.create(
@@ -1020,7 +1052,7 @@ class Command(BaseCommand):
                 meta=SEED_TAG,
             )
         host = next((x for x in created if x.integration_kind == "it-host"), None)
-        if host:
+        if host and not getattr(self, "compact", False):
             for m in range(8):
                 ItMetricSample.objects.create(
                     integration=host,

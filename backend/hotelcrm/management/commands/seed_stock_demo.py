@@ -63,6 +63,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--hotel", default="DEMO", help="Otel adı veya kodu.")
         parser.add_argument("--wipe", action="store_true", help="Mevcut stok verisini sil ve yeniden üret.")
+        parser.add_argument("--compact", action="store_true", help="Az ürün ve hareket (Vercel).")
 
     @transaction.atomic
     def handle(self, *args, **opts):
@@ -108,8 +109,10 @@ class Command(BaseCommand):
     def _seed_body(self, hotel, opts):
         today = timezone.localdate()
         rng = random.Random(7)
+        compact = bool(opts.get("compact"))
+        catalog = SEED_ITEMS[:8] if compact else SEED_ITEMS
         items = []
-        for tpl in SEED_ITEMS:
+        for tpl in catalog:
             (
                 name, category, wh, unit, qty, mn, mx, cost, sku, supplier, shelf, exp_days
             ) = tpl
@@ -170,7 +173,8 @@ class Command(BaseCommand):
                 business_date=today - timedelta(days=day_offset),
                 note="",
             )
-            for _ in range(rng.randint(2, 5)):
+            n_out = 1 if compact else rng.randint(2, 5)
+            for _ in range(n_out):
                 out_qty = Decimal(str(rng.choice([2, 3, 5, 8, 10, 15])))
                 d = today - timedelta(days=rng.randint(1, day_offset - 1))
                 StockMovement.objects.create(

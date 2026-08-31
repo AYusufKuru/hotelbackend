@@ -1,4 +1,4 @@
-"""25 inceleme oteli: benzersiz isim, kullanıcı ve şifre.
+"""18 inceleme oteli: benzersiz isim, kullanıcı ve şifre.
 
 Kullanıcı süperuser değildir; şube listesinde yalnızca kendi otelini görür.
 
@@ -40,13 +40,6 @@ TRIAL_ACCOUNTS: tuple[tuple, ...] = (
     ("HT16", "Hoterfea Side Antik", "Antalya", "Side Antik Cad.", "Manavgat", Decimal("36.766700"), Decimal("31.388900"), "side.antik", "SideAntik$Apollon35"),
     ("HT17", "Hoterfea Assos Kuzey", "Çanakkale", "Behramkale", "Ayvacık", Decimal("39.490600"), Decimal("26.336900"), "assos.kuzey", "AssosKuzey+Athena52"),
     ("HT18", "Hoterfea Bozcaada Bağ", "Çanakkale", "Cumhuriyet Mah.", "Bozcaada", Decimal("39.835000"), Decimal("26.069700"), "bozcaada.bag", "Bozcaada!Bag77"),
-    ("HT19", "Hoterfea Sapanca Göl", "Sakarya", "Kırkpınar", "Sapanca", Decimal("40.691100"), Decimal("30.267500"), "sapanca.gol", "Sapanca#Gol14"),
-    ("HT20", "Hoterfea Abant Orman", "Bolu", "Abant Gölü", "Mudurnu", Decimal("40.605600"), Decimal("31.277800"), "abant.orman", "AbantOrman*Ced29"),
-    ("HT21", "Hoterfea Ölüdeniz", "Muğla", "Belcekız", "Fethiye", Decimal("36.551100"), Decimal("29.121400"), "oludeniz.belcekiz", "Oludeniz&Mavi68"),
-    ("HT22", "Hoterfea Kaş Meis", "Antalya", "Hastane Cad.", "Kaş", Decimal("36.201900"), Decimal("29.637800"), "kas.meis", "KasMeis^Likya41"),
-    ("HT23", "Hoterfea Datça Ege", "Muğla", "İskele Mah.", "Datça", Decimal("36.727800"), Decimal("27.686700"), "datca.ege", "DatcaEge~Badem16"),
-    ("HT24", "Hoterfea Amasra Kale", "Bartın", "Kum Mah.", "Amasra", Decimal("41.749400"), Decimal("32.386400"), "amasra.kale", "AmasraKale$Tarih83"),
-    ("HT25", "Hoterfea Safranbolu Konak", "Karabük", "Çeşme Mah.", "Safranbolu", Decimal("41.250800"), Decimal("32.694200"), "safranbolu.konak", "Safran!Konak57"),
 )
 
 CREDENTIALS_FILE = Path(__file__).resolve().parents[4] / "inceleme-girisleri.txt"
@@ -86,7 +79,7 @@ def _find_user(hotel: Hotel, new_username: str, index: int) -> tuple:
 
 
 class Command(BaseCommand):
-    help = "25 inceleme oteli: benzersiz ad, kullanıcı, şifre ve demo veri."
+    help = "18 inceleme oteli: benzersiz ad, kullanıcı, şifre ve hafif demo veri."
 
     def add_arguments(self, parser):
         parser.add_argument("--skip-data", action="store_true")
@@ -157,9 +150,18 @@ class Command(BaseCommand):
             if skip_data:
                 continue
             call_command("seed_pms_test_data", hotel=code, wipe=True, compact=True)
-            call_command("seed_accounting_test_data", hotel=code, wipe=True)
-            call_command("seed_stock_demo", hotel=code, wipe=True)
-            call_command("seed_ops_demo", hotel=code, wipe=True)
+            call_command("seed_accounting_test_data", hotel=code, wipe=True, compact=True)
+            call_command("seed_stock_demo", hotel=code, wipe=True, compact=True)
+            call_command("seed_ops_demo", hotel=code, wipe=True, compact=True)
+
+        retired = [f"HT{i:02d}" for i in range(19, 26)]
+        for extra in Hotel.objects.filter(code__in=retired):
+            qs = UserRole.objects.filter(hotel=extra, user__is_superuser=False).select_related("user")
+            for ur in qs:
+                if ur.user.is_active:
+                    ur.user.is_active = False
+                    ur.user.save(update_fields=["is_active"])
+                    self.stdout.write(f"{extra} kullanici pasif: {ur.user.username}")
 
         try:
             CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)

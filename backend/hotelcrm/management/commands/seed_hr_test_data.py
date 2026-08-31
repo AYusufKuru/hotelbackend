@@ -507,7 +507,7 @@ class Command(BaseCommand):
 
         rnd = random.Random(20260514)
         compact = bool(options["compact"])
-        staff_count = 10 if compact else 28
+        staff_count = 5 if compact else 28
 
         with transaction.atomic():
             dept_map: dict[str, Department] = {}
@@ -568,7 +568,7 @@ class Command(BaseCommand):
 
             abs_reasons = [c[0] for c in StaffAbsenceReason.choices]
             n_abs = 0
-            k_sample = min(12, len(created_staff))
+            k_sample = min(3 if compact else 12, len(created_staff))
             if k_sample > 0:
                 for sm in rnd.sample(created_staff, k=k_sample):
                     for _ in range(rnd.randint(1, 3)):

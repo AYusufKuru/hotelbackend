@@ -92,6 +92,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Önceki tohum kayıtlarını (TST* / [seed-accounting]) sil",
         )
+        parser.add_argument(
+            "--compact",
+            action="store_true",
+            help="Az cari/fatura/yevmiye (Vercel inceleme tohumu).",
+        )
 
     def handle(self, *args, **options):
         code = str(options["hotel"]).strip()
@@ -105,15 +110,16 @@ class Command(BaseCommand):
 
         rnd = random.Random(2026514)
         today = timezone.localdate()
+        compact = bool(options["compact"])
 
         with transaction.atomic():
             self._seed_gl(hotel, rnd)
-            self._seed_partners(hotel, rnd)
-            self._seed_fixed_assets(hotel, rnd, today)
-            self._seed_budgets(hotel, today)
-            self._seed_invoices(hotel, rnd, today)
-            self._seed_purchase_orders(hotel, rnd, today)
-            self._seed_journal(hotel, rnd, today)
+            self._seed_partners(hotel, rnd, compact=compact)
+            self._seed_fixed_assets(hotel, rnd, today, compact=compact)
+            self._seed_budgets(hotel, today, compact=compact)
+            self._seed_invoices(hotel, rnd, today, compact=compact)
+            self._seed_purchase_orders(hotel, rnd, today, compact=compact)
+            self._seed_journal(hotel, rnd, today, compact=compact)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -167,7 +173,7 @@ class Command(BaseCommand):
             out.append(obj)
         return out
 
-    def _seed_partners(self, hotel: Hotel, rnd: random.Random) -> None:
+    def _seed_partners(self, hotel: Hotel, rnd: random.Random, *, compact: bool = False) -> None:
         TYPES = [
             ("customer", "120", "Misafir / Kurumsal"),
             ("supplier", "320", "Tedarikçi"),
@@ -175,7 +181,8 @@ class Command(BaseCommand):
             ("staff", "335", "Personel"),
         ]
         cities = ("İstanbul", "Ankara", "İzmir", "Antalya", "Bursa")
-        for i in range(28):
+        n_partners = 6 if compact else 28
+        for i in range(n_partners):
             t, glsuf, label = TYPES[i % len(TYPES)]
             code = f"TST-P-{i + 1:03d}"
             title = f"{label} Demo {i + 1} — {rnd.choice(['A.Ş.', 'Ltd.', 'Şti.'])}"
@@ -205,7 +212,7 @@ class Command(BaseCommand):
                 },
             )
 
-    def _seed_fixed_assets(self, hotel: Hotel, rnd: random.Random, today: date) -> None:
+    def _seed_fixed_assets(self, hotel: Hotel, rnd: random.Random, today: date, *, compact: bool = False) -> None:
         specs: list[tuple[str, str, str, Decimal, int]] = [
             ("building", "252", "Ana bina kabuk (demo)", Decimal("12500000"), 50),
             ("fixture", "25501", "Lobi mobilya takımı", Decimal("680000"), 5),
@@ -217,7 +224,8 @@ class Command(BaseCommand):
             ("intangible", "260", "PMS lisansı (3 yıl)", Decimal("180000"), 3),
         ]
         cats = [s[0] for s in specs]
-        for i in range(22):
+        n_assets = 6 if compact else 22
+        for i in range(n_assets):
             if i < len(specs):
                 cat, glsuf, base_name, cost, life = specs[i]
             else:
@@ -253,7 +261,7 @@ class Command(BaseCommand):
                 },
             )
 
-    def _seed_budgets(self, hotel: Hotel, today: date) -> None:
+    def _seed_budgets(self, hotel: Hotel, today: date, *, compact: bool = False) -> None:
         year = today.year
         depts = [
             "Housekeeping",
@@ -267,6 +275,8 @@ class Command(BaseCommand):
             "Güvenlik",
             "Muhasebe",
         ]
+        if compact:
+            depts = depts[:4]
         for i, name in enumerate(depts):
             b = Decimal(180_000 + i * 45_000)
             a = d2(b * Decimal(random.Random(2026 + i).uniform(0.72, 1.08)))
@@ -299,7 +309,7 @@ class Command(BaseCommand):
         }
         return json.dumps(payload, ensure_ascii=False)
 
-    def _seed_invoices(self, hotel: Hotel, rnd: random.Random, today: date) -> None:
+    def _seed_invoices(self, hotel: Hotel, rnd: random.Random, today: date, *, compact: bool = False) -> None:
         sale_scenarios = [
             ("KONAK_OTEL", 10),
             ("FB_REST", 10),
@@ -333,7 +343,10 @@ class Command(BaseCommand):
         ]
 
         n = 0
-        for _ in range(22):
+        n_sale = 4 if compact else 22
+        n_purch = 3 if compact else 20
+        n_refund = 1 if compact else 5
+        for _ in range(n_sale):
             cat, kdv_p = rnd.choice(sale_scenarios)
             brut = Decimal(rnd.randint(2_000, 180_000))
             paid = brut if rnd.random() < 0.55 else d2(brut * Decimal(rnd.randint(0, 80)) / Decimal("100"))
@@ -361,7 +374,7 @@ class Command(BaseCommand):
                 },
             )
 
-        for _ in range(20):
+        for _ in range(n_purch):
             cat, kdv_p = rnd.choice(purch_scenarios)
             brut = Decimal(rnd.randint(1_500, 95_000))
             paid = brut if rnd.random() < 0.5 else Decimal("0")
@@ -387,7 +400,7 @@ class Command(BaseCommand):
                 },
             )
 
-        for _ in range(5):
+        for _ in range(n_refund):
             cat, kdv_p = rnd.choice(refund_scenarios)
             brut = Decimal(rnd.randint(500, 25_000))
             n += 1
@@ -410,7 +423,7 @@ class Command(BaseCommand):
                 },
             )
 
-    def _seed_purchase_orders(self, hotel: Hotel, rnd: random.Random, today: date) -> None:
+    def _seed_purchase_orders(self, hotel: Hotel, rnd: random.Random, today: date, *, compact: bool = False) -> None:
         statuses = list(PurchaseOrderStatus)
         cats = ("Gıda & İçecek", "Temizlik", "Tekstil", "Teknoloji", "Ofis", "Bakım & Onarım")
         items = (
@@ -422,7 +435,8 @@ class Command(BaseCommand):
             "Havalandırma filtresi",
         )
         suppliers = ("Gıda Ltd.", "Temizlik A.Ş.", "Tekstil San.", "Teknoloji A.Ş.", "Ofis Malz. Ltd.")
-        for i in range(18):
+        n_po = 4 if compact else 18
+        for i in range(n_po):
             PurchaseOrder.objects.get_or_create(
                 hotel=hotel,
                 display_code=f"TST-PO-{hotel.code}-{i + 1:03d}",
@@ -443,6 +457,8 @@ class Command(BaseCommand):
         hotel: Hotel,
         rnd: random.Random,
         today: date,
+        *,
+        compact: bool = False,
     ) -> None:
         if JournalEntry.objects.filter(hotel=hotel, description__contains=SEED_TAG).exists():
             return
@@ -459,7 +475,8 @@ class Command(BaseCommand):
             ("Banka komisyonu", [("78001", "D", "400"), ("191", "D", "80"), ("320", "C", "480")]),
             ("Personel borçlanması", [("770", "D", "9000"), ("335", "C", "9000")]),
         ]
-        for fid in range(1, 35):
+        n_fis = 8 if compact else 34
+        for fid in range(1, n_fis + 1):
             title, raw_lines = rnd.choice(specs)
             entry_date = today - timedelta(days=rnd.randint(0, 130))
             fis_no = FIS_PREFIX_FMT.format(hotel=hotel.code, n=fid)
