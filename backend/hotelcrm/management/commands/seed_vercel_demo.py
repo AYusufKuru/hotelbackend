@@ -44,31 +44,9 @@ class Command(BaseCommand):
             )
             return
 
-        hotels = ("DEMO", "DEMO2")
-        pms_compact = not _truthy("SEED_DEMO_FULL")
-        if pms_compact:
-            self.stdout.write(
-                "seed_vercel_demo: using compact PMS seed (fast build). "
-                "Set SEED_DEMO_FULL=1 for full dataset (slow; may timeout on Vercel)."
-            )
-        else:
-            self.stdout.write(
-                "seed_vercel_demo: full PMS seed (SEED_DEMO_FULL=1) — this may take several minutes."
-            )
-
         try:
-            self.stdout.write("seed_vercel_demo: ensuring demo hotels...")
-            call_command("seed_demo_hotel")
-
-            for hotel in hotels:
-                self.stdout.write(f"seed_vercel_demo: PMS seed {hotel}...")
-                call_command("seed_pms_test_data", hotel=hotel, wipe=True, compact=pms_compact)
-                self.stdout.write(f"seed_vercel_demo: accounting seed {hotel}...")
-                call_command("seed_accounting_test_data", hotel=hotel, wipe=True)
-                self.stdout.write(f"seed_vercel_demo: stock seed {hotel}...")
-                call_command("seed_stock_demo", hotel=hotel, wipe=True)
-                self.stdout.write(f"seed_vercel_demo: ops seed {hotel}...")
-                call_command("seed_ops_demo", hotel=hotel, wipe=True)
+            self.stdout.write("seed_vercel_demo: 25 inceleme oteli + üyelik + veri...")
+            call_command("seed_trial_hotels", count=25)
         except Exception as exc:
             self.stderr.write(self.style.ERROR(f"seed_vercel_demo başarısız (yayın devam eder): {exc}"))
             return
